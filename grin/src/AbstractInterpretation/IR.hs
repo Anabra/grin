@@ -18,6 +18,8 @@ import Data.Set (Set)
 import qualified Grin.Grin as Grin
 import Grin.Grin (Name)
 
+import Transformations.Util (TagInfo(..), updateTagInfo)
+
 newtype Reg = Reg Word32 deriving (Generic, NFData, Eq, Ord, Show)
 newtype Mem = Mem Word32 deriving (Generic, NFData, Eq, Ord, Show)
 
@@ -125,6 +127,8 @@ data AbstractProgram
   , absInstructions     :: [Instruction]
   , absFunctionArgMap   :: Map.Map Name (Reg, [Reg])
   , absTagMap           :: Bimap.Bimap Grin.Tag Tag
+  -- NOTE: mapping of Grin tags to their maximum arities
+  , absTagInfo          :: TagInfo
   }
   deriving Show
 
@@ -135,4 +139,5 @@ emptyAbstractProgram = AbstractProgram
   , absInstructions     = []
   , absFunctionArgMap   = Map.empty
   , absTagMap           = Bimap.empty
+  , absTagInfo          = TagInfo Map.empty
   }

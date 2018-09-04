@@ -50,9 +50,8 @@ caseBackwardPropagationNodesExpectedRegisters = M.fromList
   ]
 
 caseBackwardPropagationNodesExpectedFunctions :: Map Name (Liveness, Vector Liveness)
-caseBackwardPropagationNodesExpectedFunctions = M.fromList
+caseBackwardPropagationNodesExpectedFunctions = mkFunctionLivenessMap
   [ ("f",        fun (livenessFRet, [liveVal]))
-  , ("grinMain", fun (livenessFRet, []))
   ]
 
 livenessFRet :: Liveness

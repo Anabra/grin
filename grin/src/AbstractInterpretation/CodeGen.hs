@@ -9,6 +9,7 @@ import qualified Data.Set as Set
 import Control.Monad.State
 
 import Grin.Grin
+import Transformations.Util (TagInfo(..), updateTagInfo)
 import qualified AbstractInterpretation.IR as IR
 import AbstractInterpretation.IR (AbstractProgram(..), HasDataFlowInfo(..))
 
@@ -70,6 +71,11 @@ getTag tag = do
       let t = IR.Tag . fromIntegral $ Bimap.size tagMap
       modify' $ modifyInfo $ \s -> s {absTagMap = Bimap.insert tag t tagMap}
       pure t
+
+addTagInfo :: HasDataFlowInfo s => Tag -> Int -> CG s ()
+addTagInfo tag arity = modify' . modifyInfo
+  $ \s@AbstractProgram{..} -> s { absTagInfo = updateTagInfo tag arity absTagInfo }
+
 
 codeGenBlock :: HasDataFlowInfo s => CG s () -> CG s [IR.Instruction]
 codeGenBlock genM = do

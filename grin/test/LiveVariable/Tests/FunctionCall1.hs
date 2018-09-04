@@ -51,4 +51,5 @@ functionCall1ExpectedFunctions = mkFunctionLivenessMap
 
 livenessX :: Liveness
 livenessX = nodeSet [ (cFoo, [live])
+                    , (cBar, [dead])
                     ]

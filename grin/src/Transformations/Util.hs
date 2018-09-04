@@ -171,11 +171,7 @@ newtype TagInfo = TagInfo { _tagArityMap :: Map.Map Tag Int }
   deriving (Eq, Show)
 
 updateTagInfo :: Tag -> Int -> TagInfo -> TagInfo
-updateTagInfo t n ti@(TagInfo m) =
-  case Map.lookup t m of
-    Just arity | arity < n -> TagInfo $ Map.insert t n m
-    Nothing                -> TagInfo $ Map.insert t n m
-    _                      -> ti
+updateTagInfo t n ti@(TagInfo m) = TagInfo $ Map.insertWith max t n m
 
 collectTagInfo :: Exp -> TagInfo
 collectTagInfo = flip execState (TagInfo Map.empty) . cataM alg

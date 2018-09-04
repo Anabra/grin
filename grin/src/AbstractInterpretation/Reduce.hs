@@ -2,6 +2,7 @@
 module AbstractInterpretation.Reduce where
 
 import Data.Int
+import Data.Word
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -10,12 +11,17 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Bimap as Bimap
 import qualified Data.Foldable
+import Data.Maybe (fromJust)
 
 import Control.Monad.State.Strict
 import Lens.Micro.Platform
 
-import AbstractInterpretation.IR
+import Transformations.Util (TagInfo(..))
+
+import AbstractInterpretation.IR as IR
 import AbstractInterpretation.CodeGen
+
+import qualified Grin.Grin as Grin (Tag)
 
 newtype NodeSet = NodeSet {_nodeTagMap :: Map Tag (Vector (Set Int32))} deriving (Eq, Show)
 
@@ -30,6 +36,10 @@ data Computer
   = Computer
   { _memory    :: Vector NodeSet
   , _register  :: Vector Value
+  -- NOTE: Same as in the AbstractProgram, just with IR tags.
+  -- This can probably replaced by a vector,
+  -- since IR.Tags are basically positive integers.
+  , _tagInfo   :: Map IR.Tag Int
   }
   deriving (Eq, Show)
 
@@ -70,6 +80,11 @@ selectReg r = register.ix (regIndex r)
 selectSimpleType r = selectReg r.simpleType
 
 selectTagMap r = selectReg r.nodeSet.nodeTagMap
+
+mkNodeWithField :: Int -> Int -> Set Int32 -> Vector (Set Int32)
+mkNodeWithField arity idx val = V.fromList $
+  empties idx ++ [val] ++ empties (arity-idx-1)
+  where empties n = replicate n Set.empty
 
 move :: Reg -> Reg -> AbstractComputation ()
 move srcReg dstReg = do
@@ -124,11 +139,28 @@ evalInstruction = \case
 
       NotEmpty -> move srcReg dstReg
 
+  -- NOTE: Now if the tag is not present in dstReg,
+  --  it creates a new empty node with the given tag
+  --  (using tag information collected during the analysis)
+  -- and then extends its given field.
   Extend {..} -> do
     -- TODO: support all selectors
     value <- use $ selectReg srcReg.simpleType
     case dstSelector of
-      NodeItem tag itemIndex -> selectTagMap dstReg.at tag.non mempty.ix itemIndex %= (mappend value)
+      NodeItem tag itemIndex -> do
+        dstTagMap <- use $ selectTagMap dstReg
+        case Map.lookup tag dstTagMap of
+          Just _  -> selectTagMap dstReg.at tag.non mempty.ix itemIndex %= (mappend value)
+          Nothing -> do
+            arityM <- use $ tagInfo.at tag
+            case arityM of
+              Just arity -> do
+                let arity = fromJust arityM
+                    vec   = mkNodeWithField arity itemIndex value
+                selectTagMap dstReg %= (Map.insert tag vec)
+              Nothing -> pure ()
+
+        selectTagMap dstReg.at tag.non mempty.ix itemIndex %= (mappend value)
       AllFields -> selectTagMap dstReg %= (Map.map (V.map (mappend value)))
 
   Move {..} -> move srcReg dstReg
@@ -192,4 +224,12 @@ evalDataFlowInfo dfi@(getDataFlowInfo -> AbstractProgram{..}) =
     emptyComputer = Computer
       { _memory   = V.replicate (fromIntegral absMemoryCounter) mempty
       , _register = V.replicate (fromIntegral absRegisterCounter) mempty
+      -- NOTE: converting Grin tags to their IR equivalents
+      , _tagInfo  = Map.mapKeys toIR $ tagInfo
       }
+
+    toIR :: Grin.Tag -> IR.Tag
+    toIR = (Bimap.!) absTagMap
+
+    tagInfo :: Map Grin.Tag Int
+    tagInfo = _tagArityMap absTagInfo

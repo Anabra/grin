@@ -115,8 +115,11 @@ codeGen = fmap reverseProgram
       bodyInstructions <- codeGenBlock $
         body >>= \case
           Z   -> doNothing
-          R r -> do emit IR.Move          { srcReg = funResultReg, dstReg = r }
-                    emit IR.CopyStructure { srcReg = r, dstReg = funResultReg }
+          R r | name == grinMain -> do
+                setBasicValLive r
+                setAllFieldsLive r
+              | otherwise -> emit IR.Move { srcReg = funResultReg, dstReg = r }
+                    -- emit IR.CopyStructure { srcReg = r, dstReg = funResultReg }
       emit $ funResultReg `isLiveThen` bodyInstructions
       pure Z
 
@@ -133,6 +136,7 @@ codeGen = fmap reverseProgram
           Lit{} -> setBasicValLive r
           Var name -> addReg name r
           ConstTagNode tag args -> do
+            addTagInfo tag (length args)
             irTag <- getTag tag
             setNodeTypeInfo r irTag (length args)
             forM_ (zip [0..] args) $ \(idx, arg) ->
@@ -181,6 +185,7 @@ codeGen = fmap reverseProgram
 
         case cpat of
           NodePat tag vars -> do
+            addTagInfo tag (length vars)
             irTag <- getTag tag
             codeGenAlt $
               -- setNodeTypeInfo valReg irTag (length vars)
@@ -208,7 +213,8 @@ codeGen = fmap reverseProgram
       (funResultReg, funArgRegs) <- getOrAddFunRegs name $ length args
       valRegs <- mapM codeGenVal args
       zipWithM_ (\src dst -> emit IR.RestrictedMove {srcReg = src, dstReg = dst}) funArgRegs valRegs
-      zipWithM_ (\src dst -> emit IR.CopyStructure {srcReg = src, dstReg = dst}) valRegs funArgRegs
+      -- NOTE: Made obsolete by constructive Extend
+      -- zipWithM_ (\src dst -> emit IR.CopyStructure {srcReg = src, dstReg = dst}) valRegs funArgRegs
       -- HINT: handle primop here because it does not have definition
       when (isPrimName name) $ codeGenPrimOp name funResultReg funArgRegs
       pure $ R funResultReg
@@ -231,6 +237,7 @@ codeGen = fmap reverseProgram
       -- setting pointer information
       emit IR.Set           { dstReg = r, constant = IR.CHeapLocation loc }
 
+      -- NOTE: still needed (even with constructive Extend)
       -- copying structural information to the heap
       emit IR.CopyStructure { srcReg = valReg, dstReg  = tmp1 }
       emit IR.Store         { srcReg = tmp1,   address = loc    }
@@ -251,9 +258,10 @@ codeGen = fmap reverseProgram
         tmp        <- newReg
         r          <- newReg
 
+        -- NOTE: Made obsolete by constructive Extend
         -- copying structural information from the heap
-        emit IR.Fetch         { addressReg = addressReg, dstReg = tmp   }
-        emit IR.CopyStructure { srcReg     = tmp,        dstReg     = r }
+        -- emit IR.Fetch         { addressReg = addressReg, dstReg = tmp   }
+        -- emit IR.CopyStructure { srcReg     = tmp,        dstReg     = r }
 
         -- restrictively propagating info from heap
         emit IR.RestrictedUpdate {srcReg = r, addressReg = addressReg}

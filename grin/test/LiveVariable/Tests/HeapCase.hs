@@ -46,7 +46,9 @@ heapCaseExpectedRegisters = M.fromList
   , ("a0", liveVal)
   , ("c1", liveVal)
   ]
-  where livenessN0 = nodeSet [ (cBool, [live]) ]
+  where livenessN0 = nodeSet [ (cBool, [live])
+                             , (cWord, [dead])
+                             ]
 
 heapCaseExpectedFunctions :: Map Name (Liveness, Vector Liveness)
 heapCaseExpectedFunctions = mkFunctionLivenessMap []

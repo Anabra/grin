@@ -46,6 +46,5 @@ functionCall2ExpectedRegisters = M.fromList
   where livenessN = nodeSet [ (cOne, [live]) ]
 
 functionCall2ExpectedFunctions :: Map Name (Liveness, Vector Liveness)
-functionCall2ExpectedFunctions = M.fromList
-  [ ("f",        fun (nodeSet [ (cTwo, [live, dead]) ], []))
-  , ("grinMain", fun (nodeSet [ (cOne, [live]) ], [])) ]
+functionCall2ExpectedFunctions = mkFunctionLivenessMap
+  [ ("f",        fun (nodeSet [ (cTwo, [live, dead]) ], [])) ]
