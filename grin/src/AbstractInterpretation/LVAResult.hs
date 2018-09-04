@@ -13,7 +13,7 @@ import Lens.Micro.Platform
 import Lens.Micro.Internal
 
 import Grin.Grin (Name, Tag)
-import AbstractInterpretation.LiveVariable (LVAProgram(..))
+import AbstractInterpretation.LiveVariable (LVAProgram(..), live)
 import AbstractInterpretation.IR as IR hiding (Tag, SimpleType, Liveness)
 import qualified AbstractInterpretation.IR as IR (Liveness)
 import qualified AbstractInterpretation.Reduce as R
@@ -44,7 +44,7 @@ toLVAResult (getDataFlowInfo -> AbstractProgram{..}) R.Computer{..} = LVAResult
   }
   where
     isLive :: Set IR.Liveness -> Bool
-    isLive = Set.member (-1)
+    isLive = Set.member live
 
     convertReg :: Reg -> Liveness
     convertReg (Reg i) = convertValue $ _register V.! (fromIntegral i)

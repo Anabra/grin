@@ -395,13 +395,16 @@ runCByPure = use psCByProgram >>= \case
 
 compileLVA :: PipelineM ()
 compileLVA = do
-  grin <- use psExp
-  case LVA.codeGen grin of
-    Right lvaProgram ->
-      psLVAProgram .= Just lvaProgram
-    Left e -> do
-      psErrors %= (e:)
-      psCByProgram .= Nothing
+  grin        <- use psExp
+  hptProgramM <- use psHPTProgram
+  case hptProgramM of
+    Just hptProgram -> case LVA.codeGen hptProgram grin of
+      Right lvaProgram ->
+        psLVAProgram .= Just lvaProgram
+      Left e -> do
+        psErrors %= (e:)
+        psLVAProgram .= Nothing
+    Nothing -> psLVAProgram .= Nothing
 
 printLVACode :: PipelineM ()
 printLVACode = do
@@ -414,13 +417,18 @@ printLVAResult = use psLVAResult >>= \case
   Just result -> pipelineLog $ show $ pretty result
 
 runLVAPure :: PipelineM ()
-runLVAPure = use psLVAProgram >>= \case
-  Nothing -> psLVAResult .= Nothing
-  Just lvaProgram -> do
-    let lvaResult = R.evalDataFlowInfo lvaProgram
-        result = LVA.toLVAResult lvaProgram lvaResult
-    psLVAResult .= Just result
+runLVAPure = do
+  s <- MonadState.get
+  let hptProgramM = _psHPTProgram s
+      lvaProgramM = _psLVAProgram s
+  case (hptProgramM, lvaProgramM) of
+    (Just hptProgram, Just lvaProgram) -> do
+      let hptComputer = R.evalDataFlowInfo hptProgram
+          lvaComputer = R.evalDataFlowInfoWith hptComputer lvaProgram
+          lvaResult   = LVA.toLVAResult lvaProgram lvaComputer
 
+      psLVAResult .= Just lvaResult
+    _ -> psLVAResult .= Nothing
 
 
 

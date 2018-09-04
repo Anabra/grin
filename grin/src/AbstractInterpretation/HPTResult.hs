@@ -25,6 +25,7 @@ data SimpleType
   | T_Float
   | T_Bool
   | T_Unit
+  | T_Unknown
   | T_Location Int
   deriving (Eq, Ord, Show)
 
@@ -76,7 +77,7 @@ toSimpleType ty | ty < 0 = case ty of
   -3 -> T_Word64
   -4 -> T_Float
   -5 -> T_Bool
-  _ -> error $ "unknown type code " ++ show ty
+  _  -> T_Unknown --error $ "unknown type code " ++ show ty
 toSimpleType l = T_Location $ fromIntegral l
 
 type instance Index   (Vector a) = Int

@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, TupleSections, TemplateHaskell #-}
+{-# LANGUAGE LambdaCase, ViewPatterns, RecordWildCards, TupleSections, TemplateHaskell #-}
 module AbstractInterpretation.LiveVariable where
 
 import Control.Monad.Trans.Except
@@ -17,8 +17,10 @@ import AbstractInterpretation.Util
 import AbstractInterpretation.CodeGen
 import qualified AbstractInterpretation.IR as IR
 import AbstractInterpretation.IR (Instruction(..), AbstractProgram(..), HasDataFlowInfo(..))
+import AbstractInterpretation.HeapPointsTo (HPTProgram(), litToSimpleType)
 
 -- NOTE: For a live variable, we could store its type information.
+-- NOTE: structural information must be provided for this analysis to work
 
 -- Live variable analysis program.
 -- For a basic value, a non-empty set represents liveness.
@@ -31,8 +33,9 @@ instance HasDataFlowInfo LVAProgram where
   getDataFlowInfo = _absProg
   modifyInfo      = over absProg
 
-emptyLVAProgram :: LVAProgram
-emptyLVAProgram = LVAProgram IR.emptyAbstractProgram
+emptyLVAProgramFromHPT :: HPTProgram -> LVAProgram
+emptyLVAProgramFromHPT (getDataFlowInfo -> p@AbstractProgram{..}) =
+  LVAProgram $ p { absInstructions = [] }
 
 type ResultLVA = Result LVAProgram
 
@@ -42,12 +45,13 @@ doNothing = pure ()
 emptyReg :: HasDataFlowInfo s => CG s IR.Reg
 emptyReg = newReg
 
+-- TODO: should test whether (-13) is member of anyset, not emptiness
 -- Tests whether the give register is live.
 isLiveThen :: IR.Reg -> [IR.Instruction] -> IR.Instruction
 isLiveThen r i = IR.If { condition = IR.NotEmpty, srcReg = r, instructions = i }
 
 live :: IR.Liveness
-live = -1
+live = -13
 
 setBasicValLive :: HasDataFlowInfo s => IR.Reg -> CG s ()
 setBasicValLive r = emit IR.Set { dstReg = r, constant = IR.CSimpleType live }
@@ -97,12 +101,12 @@ codeGenVal = \case
   val -> throwE $ "unsupported value " ++ show val
 
 
-codeGen :: Exp -> Either String LVAProgram
-codeGen = fmap reverseProgram
-        . (\(a,s) -> s<$a)
-        . flip runState emptyLVAProgram
-        . runExceptT
-        . (cata folder >=> const setMainLive)
+codeGen :: HPTProgram -> Exp -> Either String LVAProgram
+codeGen hptProg = fmap reverseProgram
+                . (\(a,s) -> s<$a)
+                . flip runState (emptyLVAProgramFromHPT hptProg)
+                . runExceptT
+                . (cata folder >=> const setMainLive)
   where
   folder :: ExpF (CG LVAProgram ResultLVA) -> CG LVAProgram ResultLVA
   folder = \case
@@ -110,34 +114,35 @@ codeGen = fmap reverseProgram
 
     DefF name args body -> do
       (funResultReg, funArgRegs) <- getOrAddFunRegs name $ length args
-      zipWithM_ addReg args funArgRegs
-      body >>= \case
-        Z   -> doNothing
-        R r -> do emit IR.Move          { srcReg = funResultReg, dstReg = r }
-                  emit IR.CopyStructure { srcReg = r, dstReg = funResultReg }
-      -- emit $ funResultReg `isLiveThen` bodyInstructions
+      -- zipWithM_ addReg args funArgRegs
+      bodyInstructions <- codeGenBlock_ $
+        body >>= \case
+          Z   -> doNothing
+          R r -> emit IR.Move { srcReg = funResultReg, dstReg = r }
+      emit $ funResultReg `isLiveThen` bodyInstructions
       pure Z
 
     EBindF leftExp lpat rightExp -> do
       leftExp >>= \case
         Z -> case lpat of
-          Unit -> pure ()
-          Var name -> do
-            r <- newReg
-            addReg name r
+          Unit -> doNothing
+          Var name -> doNothing
+            -- r <- newReg
+            -- addReg name r
           _ -> throwE $ "pattern mismatch at HPT bind codegen, expected Unit got " ++ show lpat
         R r -> case lpat of
           Unit  -> setBasicValLive r
           Lit{} -> setBasicValLive r
-          Var name -> addReg name r
+          Var name -> doNothing --addReg name r
           ConstTagNode tag args -> do
             irTag <- getTag tag
             -- emit $ setNodeTypeInfo r irTag (length args)
             bindInstructions <- codeGenBlock_ $ forM (zip [0..] args) $ \(idx, arg) ->
               case arg of
                 Var name -> do
-                  argReg <- newReg
-                  addReg name argReg
+                  argReg <- getReg name
+                  -- argReg <- newReg
+                  -- addReg name argReg
                   emit IR.Extend { srcReg = argReg, dstSelector = IR.NodeItem irTag idx, dstReg = r }
                 Lit {} -> emit IR.Set { dstReg = r, constant = IR.CNodeItem irTag idx live }
                 _ -> throwE $ "illegal node pattern component " ++ show arg
@@ -166,31 +171,22 @@ codeGen = fmap reverseProgram
               bindInstructions <- codeGenBlock_ bindCPatVarsM
               altM >>= \case
                 Z -> doNothing
-                R altResultReg -> do
-                  --NOTE: We propagateliveness information rom the case result register
-                  -- to the alt result register. But we also have to propagate pointer
-                  -- information from the alternative into the case result register.
-                  -- Any information present in the alt result reg is always a
-                  -- subset of the information present in the case result register.
-                  -- This means, we do not propagate any additional information
-                  -- with the second move instruction.
-                  -- It is also needed for propagating node info into the
-                  -- result register.
-                  emit IR.RestrictedMove {srcReg = caseResultReg, dstReg = altResultReg}
-
-                  -- this might probably could be replaced by a CopyStructure
-                  -- and a "SimpleTypeCopy"
-                  emit IR.Move {srcReg = altResultReg, dstReg = caseResultReg}
+                R altResultReg -> emit IR.RestrictedMove
+                  { srcReg = caseResultReg
+                  , dstReg = altResultReg
+                  }
               return bindInstructions
 
+        -- TODO: scope monadic combinator
         case cpat of
           NodePat tag vars -> do
             irTag <- getTag tag
             bindInstructions <- codeGenAlt $
               -- bind pattern variables
               forM_ (zip [0..] vars) $ \(idx, name) -> do
-                argReg <- newReg
-                addReg name argReg
+                argReg <- getReg name
+                -- argReg <- newReg
+                -- addReg name argReg
                 emit IR.Extend {srcReg = argReg, dstSelector = IR.NodeItem irTag idx, dstReg = valReg}
             emit IR.If
               { condition    = IR.NodeTypeExists irTag
@@ -202,7 +198,11 @@ codeGen = fmap reverseProgram
           -- we could generate code conditionally here as well
           LitPat lit -> do
             bindInstructions <- codeGenAlt $ setBasicValLive valReg
-            mapM_ emit bindInstructions
+            emit IR.If
+              { condition    = IR.SimpleTypeExists (litToSimpleType lit)
+              , srcReg       = valReg
+              , instructions = bindInstructions
+              }
 
           -- We have no usable information.
           DefaultPat -> do
@@ -227,7 +227,6 @@ codeGen = fmap reverseProgram
       (funResultReg, funArgRegs) <- getOrAddFunRegs name $ length args
       valRegs <- mapM codeGenVal args
       zipWithM_ (\src dst -> emit IR.RestrictedMove {srcReg = src, dstReg = dst}) funArgRegs valRegs
-      zipWithM_ (\src dst -> emit IR.CopyStructure {srcReg = src, dstReg = dst}) valRegs funArgRegs
       -- HINT: handle primop here because it does not have definition
       when (isPrimName name) $ codeGenPrimOp name funResultReg funArgRegs
       pure $ R funResultReg
@@ -243,20 +242,12 @@ codeGen = fmap reverseProgram
     SStoreF val -> do
       loc    <- newMem
       r      <- newReg
-      tmp1   <- newReg
-      tmp2   <- newReg
+      tmp    <- newReg
       valReg <- codeGenVal val
 
-      -- setting pointer information
-      emit IR.Set           { dstReg = r, constant = IR.CHeapLocation loc }
-
-      -- copying structural information to the heap
-      emit IR.CopyStructure { srcReg = valReg, dstReg  = tmp1 }
-      emit IR.Store         { srcReg = tmp1,   address = loc    }
-
       -- restrictively propagating info from heap
-      emit IR.Fetch          { addressReg = r,    dstReg = tmp2   }
-      emit IR.RestrictedMove { srcReg     = tmp2, dstReg = valReg }
+      emit IR.Fetch          { addressReg = r,   dstReg = tmp   }
+      emit IR.RestrictedMove { srcReg     = tmp, dstReg = valReg }
 
       pure $ R r
 
@@ -267,12 +258,7 @@ codeGen = fmap reverseProgram
       Just {} -> throwE "LVA codegen does not support indexed fetch"
       Nothing -> do
         addressReg <- getReg name
-        tmp        <- newReg
         r          <- newReg
-
-        -- copying structural information from the heap
-        emit IR.Fetch         { addressReg = addressReg, dstReg = tmp   }
-        emit IR.CopyStructure { srcReg     = tmp,        dstReg     = r }
 
         -- restrictively propagating info from heap
         emit IR.RestrictedUpdate {srcReg = r, addressReg = addressReg}
