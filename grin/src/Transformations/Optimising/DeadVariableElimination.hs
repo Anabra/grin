@@ -58,8 +58,8 @@ deleteDeadBindings lvaResult tyEnv = cataM alg where
   alg :: ExpF Exp -> Trf Exp 
   alg = \case 
     e@(EBindF SReturn{} lpat rhs) -> rmWhenAllDead e rhs lpat 
-    e@(EBindF SFetchI{} lpat rhs) -> rmWhenAllDead e rhs lpat
-    e@(EBindF (SStore _) (Var p) rhs) 
+    e@(EBindF SFetch{} lpat rhs) -> rmWhenAllDead e rhs lpat
+    e@(EBindF SStore{} (Var p) rhs) 
       | Just locs <- tyEnv ^? variable . at p . _Just . _T_SimpleType . _T_Location -> do
         unless (isSingleton locs) (throwE $ multipleLocs p locs)
         pointerDead <- isVarDeadM p 

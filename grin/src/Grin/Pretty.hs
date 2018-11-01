@@ -58,7 +58,8 @@ instance Pretty Exp where
       -- Simple Expr
       SAppF name args         -> hsep (((if isPrimName name then dullyellow else cyan) $ text name) : map pretty args)
       SReturnF val            -> keyword "pure" <+> pretty val
-      SStoreF val             -> keywordR "store" <+> pretty val
+      SStoreIF Nothing val    -> keywordR "store" <+> pretty val
+      SStoreIF (Just i) val   -> keywordR "store" <> brackets (int i) <+> pretty val
       SFetchIF name Nothing   -> keywordR "fetch" <+> text name
       SFetchIF name (Just i)  -> keywordR "fetch" <+> text name <> brackets (int i)
       SUpdateF name val       -> keywordR "update" <+> text name <+> pretty val

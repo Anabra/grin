@@ -66,6 +66,13 @@ TODO:
     - (args' == args after dde) and (l == no. live args of foo) and (n == no. args'): 
     - PNfoo args --> P(l-n)foo args'
     - if last argument is deleted, then do ... ?
+
+  Indexed store:
+    ✔ introduce indexed store AST node @done(18-11-01 21:48)
+    - modify dataflow analyses to correctly handle indexed store
+    - extend linter so that checks whether indexed stores are used correctly
+      - the AST should either contain only non-indexed stores
+      - or continously increasing indexed stores starting from 0
   
 Archive:
   ✔ genProgWith (in Test.Test) -> readd dead parameter elimination @done(18-10-30 22:23) @project(TODO.LOW)

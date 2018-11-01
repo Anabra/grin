@@ -82,7 +82,7 @@ data Exp
   -- Simple Exp
   | SApp        Name [SimpleVal]
   | SReturn     Val
-  | SStore      Val
+  | SStoreI     (Maybe Int) Val -- give a unique index to the store operation
   | SFetchI     Name (Maybe Int) -- fetch a full node or a single node item in low level GRIN
   | SUpdate     Name Val
   | SBlock      Exp
@@ -97,5 +97,8 @@ deriving instance Show a  => Show (ExpF a)
 deriving instance Eq a    => Eq   (ExpF a)
 deriving instance Ord a   => Ord  (ExpF a)
 
-pattern SFetch name = SFetchI name Nothing
+pattern SFetch  name = SFetchI  name Nothing
 pattern SFetchF name = SFetchIF name Nothing
+
+pattern SStore  name = SStoreI  Nothing name
+pattern SStoreF name = SStoreIF Nothing name
