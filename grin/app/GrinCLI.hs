@@ -25,6 +25,7 @@ transformOpts :: Parser Transformation
 transformOpts =
       flg CaseSimplification "cs" "Case Simplification"
   <|> flg SplitFetch "sf" "Split Fetch"
+  <|> flg StoreIndexing "si" "Store Indexing"
   <|> flg Vectorisation "v" "Vectorisation"
   <|> flg RegisterIntroduction "ri" "Register Introduction"
   <|> flg ProducerNameIntroduction "pni" "Producer Name Introduction"

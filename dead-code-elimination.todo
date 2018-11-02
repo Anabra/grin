@@ -30,18 +30,6 @@ Dead variable elimination:
   - when deleting a binding, replace all occurences of the deleted name with #undefined
   - when deleting a store, update #undefined types
 
-Side effects:
-  
-  DDE:
-    - has no effect 
-  
-  DPE:
-    - has no effect 
-    - if a parameter is dead, it means that even if it is a pointer, its location will never be used
-
-  DVE:
-    - 
-
 TODO:
   HIGH:
     - make sure, that all dead code elimination transfromations handle effectful functions correctly
@@ -69,10 +57,33 @@ TODO:
 
   Indexed store:
     ✔ introduce indexed store AST node @done(18-11-01 21:48)
-    - modify dataflow analyses to correctly handle indexed store
-    - extend linter so that checks whether indexed stores are used correctly
+    ✔ modify dataflow analyses to correctly handle indexed store @done(18-11-02 20:58)
+    - extend linter so that it checks whether indexed stores are used correctly
       - the AST should either contain only non-indexed stores
       - or continously increasing indexed stores starting from 0
+    - make sure that CSE           correctly handles indexed stores
+    - make sure that ArityRaising  correctly handles indexed stores
+    - make sure that PNI           correctly handles indexed stores
+    - make sure that RegIntro      correctly handles indexed stores
+    - make sure that Vectorisation correctly handles indexed stores
+
+    - #undefined nodes should always rely only on indexed stores, never on unindexed ones
+    - we should always index stores before any transformation that can introduce #undefineds
+    - this way deleting a store will never invalidate the #undefineds' types
+    - there is one edge case: 
+      - when deleting the store with the highest index
+      - then calculating the type env again (using HPT)
+      - some #undefineds' types will refer to non-existent heap locations 
+      - we should delete the deleted locations from #undefineds' types
+
+  Store reindexing:
+    - store reindexing transformation should not be called on AST's with #undefineds (since it can invalidate their types)
+    - call it before dead code elimination, once
+    - make sure, that inlining transformations introduce indexed stores
+
+  Store indexing:
+    - indexes only unindexed stores
+    - can be called anytime, will not invalidate types that rely on only indexed stores
   
 Archive:
   ✔ genProgWith (in Test.Test) -> readd dead parameter elimination @done(18-10-30 22:23) @project(TODO.LOW)

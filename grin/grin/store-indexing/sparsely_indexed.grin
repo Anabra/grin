@@ -1,0 +1,4 @@
+grinMain =
+  p0 <- store[0] (CInt 5)
+  p2 <- store[2] (CInt 5)
+  pure 0

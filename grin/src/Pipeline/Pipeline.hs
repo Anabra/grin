@@ -26,6 +26,7 @@ import Transformations.BindNormalisation
 import qualified Grin.Lint as Lint
 import Grin.PrettyLint
 import Transformations.Simplifying.SplitFetch
+import Transformations.Simplifying.StoreIndexing
 import Transformations.Simplifying.CaseSimplification
 import Transformations.Optimising.Inlining (inlineEval, inlineApply, inlineBuiltins)
 import Transformations.UnitPropagation
@@ -86,6 +87,7 @@ data Transformation
   | ProducerNameIntroduction
   | Vectorisation
   | SplitFetch
+  | StoreIndexing
   | CaseSimplification
   | RightHoistFetch
   | InlineEval
@@ -130,6 +132,7 @@ transformation n = \case
   GenerateEval                    -> noEffectMap $ noTypeEnv generateEval
   CaseSimplification              -> noEffectMap $ noTypeEnv caseSimplification
   SplitFetch                      -> noEffectMap $ noTypeEnv splitFetch
+  StoreIndexing                   -> noEffectMap $ noTypeEnv storeIndexing
   RegisterIntroduction            -> noEffectMap $ noTypeEnv $ registerIntroductionI n
   ProducerNameIntroduction        -> noEffectMap $ noTypeEnv producerNameIntroduction
   RightHoistFetch                 -> noEffectMap $ noTypeEnv RHF.rightHoistFetch

@@ -114,6 +114,7 @@ library
     Transformations.Simplifying.RegisterIntroduction
     Transformations.Simplifying.RightHoistFetch2
     Transformations.Simplifying.SplitFetch
+    Transformations.Simplifying.StoreIndexing
     Transformations.Simplifying.Vectorisation
     Transformations.Simplifying.Vectorisation2
 
@@ -280,6 +281,7 @@ test-suite grin-test
                      , Transformations.Simplifying.RightHoistFetchSpec
                      , Transformations.Simplifying.VectorisationSpec
                      , Transformations.Simplifying.ProducerNameIntroductionSpec
+                     , Transformations.Simplifying.StoreIndexingSpec
                      , Transformations.Optimising.CaseCopyPropagationSpec
                      , Transformations.Optimising.CopyPropagationSpec
                      , Transformations.Optimising.ConstantFoldingSpec
