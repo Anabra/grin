@@ -28,6 +28,7 @@ import LiveVariable.Tests.HeapSimple
 import LiveVariable.Tests.HeapUpdateComplex
 import LiveVariable.Tests.HeapUpdateFunCall
 import LiveVariable.Tests.HeapUpdateLocal
+import LiveVariable.Tests.IndexedStore
 import LiveVariable.Tests.LitPat
 import LiveVariable.Tests.MainNodeRet
 import LiveVariable.Tests.NodesSimple
@@ -65,6 +66,7 @@ runTestsFrom fromCurDir = testGroup lvaTestName $
     , heapUpdateComplexSrc
     , heapUpdateFunCallSrc
     , heapUpdateLocalSrc
+    , indexedStoreSrc
     , litPatSrc
     , mainNodeRetSrc
     , nodesSimpleSrc
@@ -87,6 +89,7 @@ runTestsFrom fromCurDir = testGroup lvaTestName $
     , heapUpdateComplexSpec
     , heapUpdateFunCallSpec
     , heapUpdateLocalSpec
+    , indexedStoreSpec
     , litPatSpec
     , mainNodeRetSpec
     , nodesSimpleSpec

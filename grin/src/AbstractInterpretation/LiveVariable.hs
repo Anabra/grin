@@ -332,8 +332,8 @@ codeGen = fmap reverseProgram
     -- We will initialize this new heap location with structural information.
     -- Also, we only need information about tags already available
     -- in valReg, so we restrict the flow of information to those.
-    SStoreF val -> do
-      loc    <- newMem
+    SStoreIF mInd val -> do
+      loc    <- maybe newMem newMemI mInd
       r      <- newReg
       tmp1   <- newReg
       tmp2   <- newReg

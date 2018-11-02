@@ -39,8 +39,9 @@ ifThenElse i = do
 
 simpleExp i = SReturn <$ kw "pure" <*> value <|>
               ECase <$ kw "case" <*> value <* kw "of" <*> (L.indentGuard sc GT i >>= some . alternative) <|>
-              SStore <$ kw "store" <*> satisfyM nodeOrVar value <|>
-              SFetchI <$ kw "fetch" <*> var <*> optional (between (char '[') (char ']') $ fromIntegral <$> integer) <|>
+              -- SStore <$ kw "store" <*> satisfyM nodeOrVar value <|>
+              SStoreI <$ kw "store" <*> optional (brackets $ fromIntegral <$> integer) <*> satisfyM nodeOrVar value <|>
+              SFetchI <$ kw "fetch" <*> var <*> optional (brackets $ fromIntegral <$> integer) <|>
               SUpdate <$ kw "update" <*> var <*> satisfyM nodeOrVar value <|>
               SBlock <$ kw "do" <*> (L.indentGuard sc GT i >>= expr) <|>
               SApp <$> primNameOrDefName <*> many simpleValue

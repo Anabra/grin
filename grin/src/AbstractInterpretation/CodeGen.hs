@@ -58,6 +58,11 @@ newReg = stateDfi $ \s@AbstractProgram{..} -> (IR.Reg absRegisterCounter, s {abs
 newMem :: HasDataFlowInfo s => CG s IR.Mem
 newMem = stateDfi $ \s@AbstractProgram{..} -> (IR.Mem absMemoryCounter, s {absMemoryCounter = succ absMemoryCounter})
 
+newMemI :: HasDataFlowInfo s => Int -> CG s IR.Mem
+newMemI loc = stateDfi $ \s@AbstractProgram{..} -> (IR.Mem memLoc, s {absMemoryCounter = max (memLoc + 1) absMemoryCounter})
+  where memLoc = fromIntegral loc
+
+
 addReg :: HasDataFlowInfo s => Name -> IR.Reg -> CG s ()
 addReg name reg = modify' $ modifyInfo $ \s@AbstractProgram{..} -> s {absRegisterMap = Map.insert name reg absRegisterMap}
 

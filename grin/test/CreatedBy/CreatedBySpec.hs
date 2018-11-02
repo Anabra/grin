@@ -10,6 +10,7 @@ import Grin.Grin
 
 import Test.IO
 import Test.Test
+import Test.Util
 import Test.Hspec
 import Test.Assertions
 
@@ -43,6 +44,7 @@ runTestsFrom fromCurDir = testGroup cbyTestName $
     , caseRestricted2Src
     , caseRestricted3Src
     , undefinedSrc
+    , indexedStoreSrc
     ]
     [ puresSpec
     , funCallSpec
@@ -53,6 +55,7 @@ runTestsFrom fromCurDir = testGroup cbyTestName $
     , caseRestricted2Spec
     , caseRestricted3Spec
     , undefinedSpec
+    , indexedStoreSpec
     ]
 
 cbyExamples :: FilePath
@@ -90,7 +93,7 @@ puresExpected = ProducerMap $
              , ("b", producerA)
              , ("c", producerA)
              ]
-  where producerA = mkProducerSet [(Tag C "Int", ["a"])]
+  where producerA = mkProducerSet [(cInt, ["a"])]
 
 puresSpec :: ProducerMap -> Spec
 puresSpec found = it "pures" $ found `sameAs` puresExpected
@@ -111,8 +114,8 @@ funCallExpected = ProducerMap $
              , ("y",  emptyProducerSet)
              , ("y1", producerX1)
              ]
-  where producerA  = mkProducerSet [(Tag C "Int", ["a"])]
-        producerX1 = mkProducerSet [(Tag C "Int", ["x1"])]
+  where producerA  = mkProducerSet [(cInt, ["a"])]
+        producerX1 = mkProducerSet [(cInt, ["x1"])]
 
 funCallSpec :: ProducerMap -> Spec
 funCallSpec found = it "function_call" $ found `sameAs` funCallExpected
@@ -129,11 +132,11 @@ caseSimpleExpected = ProducerMap $
              , ("x0", producerX0)
              , ("x1", producerX1)
              ]
-  where producerA  = mkProducerSet [ (Tag C "Int",  ["x0"])
-                                   , (Tag C "Bool", ["x1"])
+  where producerA  = mkProducerSet [ (cInt,  ["x0"])
+                                   , (cBool, ["x1"])
                                    ]
-        producerX0 = mkProducerSet [(Tag C "Int",  ["x0"])]
-        producerX1 = mkProducerSet [(Tag C "Bool", ["x1"])]
+        producerX0 = mkProducerSet [(cInt,  ["x0"])]
+        producerX1 = mkProducerSet [(cBool, ["x1"])]
 
 caseSimpleSpec :: ProducerMap -> Spec
 caseSimpleSpec found = it "case_simple" $ found `sameAs` caseSimpleExpected
@@ -153,9 +156,9 @@ heapExpected = ProducerMap $
              , ("y0", producerY0)
              , ("y1", producerY1)
              ]
-  where producerX0 = mkProducerSet [(Tag C "Int",  ["x0"])]
-        producerX1 = mkProducerSet [(Tag C "Bool", ["x1"])]
-        producerX2 = mkProducerSet [(Tag C "Bool", ["x2"])]
+  where producerX0 = mkProducerSet [(cInt,  ["x0"])]
+        producerX1 = mkProducerSet [(cBool, ["x1"])]
+        producerX2 = mkProducerSet [(cBool, ["x2"])]
         producerY0 = producerX0 <> producerX2
         producerY1 = producerX1 <> producerX2
 
@@ -181,11 +184,11 @@ caseRestricted1Expected = ProducerMap $
              , ("x0", producerX0)
              , ("x1", producerX1)
              ]
-  where producerX0 = mkProducerSet [(Tag C "Int",  ["x0"])]
-        producerX1 = mkProducerSet [(Tag C "Bool", ["x1"])]
+  where producerX0 = mkProducerSet [(cInt,  ["x0"])]
+        producerX1 = mkProducerSet [(cBool, ["x1"])]
         producerA0 = producerX0 <> producerX1
-        producerB0 = mkProducerSet [(Tag C "Int",  ["b0"])]
-        producerB1 = mkProducerSet [(Tag C "Bool", ["b1"])]
+        producerB0 = mkProducerSet [(cInt,  ["b0"])]
+        producerB1 = mkProducerSet [(cBool, ["b1"])]
         producerR0 = producerB0 <> producerB1
 
 caseRestricted1Spec :: ProducerMap -> Spec
@@ -210,11 +213,11 @@ caseRestricted2Expected = ProducerMap $
              , ("x0", producerX0)
              , ("x1", producerX1)
              ]
-  where producerX0 = mkProducerSet [(Tag C "Int",  ["x0"])]
-        producerX1 = mkProducerSet [(Tag C "Bool", ["x1"])]
+  where producerX0 = mkProducerSet [(cInt,  ["x0"])]
+        producerX1 = mkProducerSet [(cBool, ["x1"])]
         producerA0 = producerX0 <> producerX1
         producerB0 = producerX0 <> producerX1
-        producerB1 = mkProducerSet [(Tag C "Bool", ["b1"])]
+        producerB1 = mkProducerSet [(cBool, ["b1"])]
         producerR0 = producerB0 <> producerB1
 
 caseRestricted2Spec :: ProducerMap -> Spec
@@ -247,14 +250,14 @@ caseRestricted3Expected = ProducerMap $
              , ("b",  emptyProducerSet)
              , ("w",  emptyProducerSet)
              ]
-  where producerX0 = mkProducerSet [(Tag C "Int",  ["x0"])]
-        producerX1 = mkProducerSet [(Tag C "Bool", ["x1"])]
+  where producerX0 = mkProducerSet [(cInt,  ["x0"])]
+        producerX1 = mkProducerSet [(cBool, ["x1"])]
         producerA0 = producerX0 <> producerX1
-        producerA1 = mkProducerSet [(Tag C "Word", ["a1"])]
-        producerY  = producerA0 `restrictedBy` (Tag C "Int") <> producerA1
-        producerY0 = mkProducerSet [(Tag C "Int",  ["y0"])]
-        producerY1 = mkProducerSet [(Tag C "Bool", ["y1"])]
-        producerY2 = mkProducerSet [(Tag C "Word", ["y2"])]
+        producerA1 = mkProducerSet [(cWord, ["a1"])]
+        producerY  = producerA0 `restrictedBy` (cInt) <> producerA1
+        producerY0 = mkProducerSet [(cInt,  ["y0"])]
+        producerY1 = mkProducerSet [(cBool, ["y1"])]
+        producerY2 = mkProducerSet [(cWord, ["y2"])]
         producerB0 = producerY0 <> producerY2 -- because the analysis is not context sensitive
         producerB1 = producerY0 <> producerY2 -- because the analysis is not context sensitive
         producerR0 = producerB0 <> producerB1
@@ -276,8 +279,8 @@ pointerInNodeExpected = ProducerMap $
              , ("pxs", emptyProducerSet)
              , ("xs",  producerXS)
              ]
-  where producerN0 = mkProducerSet [(Tag C "Nil",  ["n0"])]
-        producerN1 = mkProducerSet [(Tag C "Cons", ["n1"])]
+  where producerN0 = mkProducerSet [(cNil,  ["n0"])]
+        producerN1 = mkProducerSet [(cCons, ["n1"])]
         producerXS = producerN0
 
 pointerInNodeSpec :: ProducerMap -> Spec
@@ -298,9 +301,31 @@ undefinedExpected = ProducerMap $
              , ("p2",  emptyProducerSet)
              , ("x0",  emptyProducerSet)
              ]
-  where producerN0 = mkProducerSet [(Tag C "Cons", [udProd])]
-        producerN1 = mkProducerSet [(Tag C "Cons", [udProd]), (Tag C "Nil", [udProd])]
-        producerN2 = mkProducerSet [(Tag C "Cons", ["n2"])]
+  where producerN0 = mkProducerSet [(cCons, [udProd])]
+        producerN1 = mkProducerSet [(cCons, [udProd]), (cNil, [udProd])]
+        producerN2 = mkProducerSet [(cCons, ["n2"])]
 
 undefinedSpec :: ProducerMap -> Spec
 undefinedSpec found = it "undefined" $ found `sameAs` undefinedExpected
+
+
+indexedStoreSrc :: FilePath
+indexedStoreSrc = cbyExamples </> "indexed_store.grin"
+
+indexedStoreExpected :: ProducerMap
+indexedStoreExpected = ProducerMap $
+  M.fromList [ ("n0", producerN0)
+             , ("n1", producerN1)
+             , ("n2", producerN2)
+             , ("p0", emptyProducerSet)
+             , ("p1", emptyProducerSet)
+             , ("p2", emptyProducerSet) 
+             , ("y2", producerN2)
+             ]
+  where producerN0 = mkProducerSet [(cInt,  ["n0"])]
+        producerN1 = mkProducerSet [(cBool, ["n1"])]
+        producerN2 = mkProducerSet [(cWord, ["n2"])]
+    
+
+indexedStoreSpec :: ProducerMap -> Spec
+indexedStoreSpec found = it "indexed_store" $ found `sameAs` indexedStoreExpected

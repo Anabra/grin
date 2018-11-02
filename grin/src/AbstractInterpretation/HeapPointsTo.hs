@@ -280,8 +280,8 @@ codeGen = (\(a,s) -> s<$a) . flip runState emptyHPTProgram . runExceptT . cata f
 
     SReturnF val -> R <$> codeGenVal val
 
-    SStoreF val -> do
-      loc <- newMem
+    SStoreIF mInd val -> do
+      loc <- maybe newMem newMemI mInd
       r <- newReg
       valReg <- codeGenVal val
       emit IR.Store {srcReg = valReg, address = loc}

@@ -242,8 +242,10 @@ test-suite grin-test
                      , DeadCodeElimination.Tests.Util
 
                      , HeapPointsTo.HeapPointsToSpec
+                     , HeapPointsTo.Tests.IndexedStore
                      , HeapPointsTo.Tests.Undefined
                      , HeapPointsTo.Tests.Util
+
                      , LiveVariable.LiveVariableSpec
                      , LiveVariable.Tests.CaseAnonymous
                      , LiveVariable.Tests.CaseMinLit
@@ -261,12 +263,14 @@ test-suite grin-test
                      , LiveVariable.Tests.HeapUpdateComplex
                      , LiveVariable.Tests.HeapUpdateFunCall
                      , LiveVariable.Tests.HeapUpdateLocal
+                     , LiveVariable.Tests.IndexedStore
                      , LiveVariable.Tests.LitPat
                      , LiveVariable.Tests.MainNodeRet
                      , LiveVariable.Tests.NodesSimple
                      , LiveVariable.Tests.NodesTricky
                      , LiveVariable.Tests.SumOpt
                      , LiveVariable.Tests.Util
+
                      , Parse.ParseSpec 
                      , Parse.Tests.Interleaved
                      , Parse.Tests.Util

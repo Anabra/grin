@@ -1,0 +1,9 @@
+grinMain = 
+  n0 <- pure (CInt 0)
+  n1 <- pure (CBool 0)
+  n2 <- pure (CWord 0)
+  p0 <- store[0] n0
+  p2 <- store[2] n2
+  p1 <- store[1] n1
+  y2 <- fetch p2
+  pure 0
