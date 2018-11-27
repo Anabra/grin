@@ -142,6 +142,7 @@ library
     process,
     text,
     text-short,
+    text-show,
     time,
     llvm-hs-pretty,
     optparse-applicative,

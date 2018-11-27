@@ -4,6 +4,11 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.State.Class
 
+import Data.Semigroup ((<>))
+import Data.Text (Text, pack)
+import qualified Data.Text    as T
+import qualified Data.Text.IO as T
+
 import Lens.Micro.Mtl
 
 import Pipeline.Definitions
@@ -16,17 +21,41 @@ import AbstractInterpretation.SharingResult
 
 pipelineLog :: String -> PipelineM ()
 pipelineLog str = do
-  shouldLog <- view poLogging
-  when shouldLog $ liftIO $ putStrLn str
+  logType <- view poLogging
+  case logType of
+    Silent   -> psLogs %= (pack str:)
+    Enabled  -> liftIO $ putStrLn str
+    Disabled -> pure ()
 
 pipelineLogNoLn :: String -> PipelineM ()
 pipelineLogNoLn str = do
-  shouldLog <- view poLogging
-  when shouldLog $ liftIO $ putStr str
+  logType <- view poLogging
+  case logType of
+    Silent   -> psLogs %= (pack str:)
+    Enabled  -> liftIO $ putStr str
+    Disabled -> pure ()
+
+pipelineLogT :: Text -> PipelineM ()
+pipelineLogT str = do
+  logType <- view poLogging
+  case logType of
+    Silent   -> psLogs %= (str:)
+    Enabled  -> liftIO $ T.putStrLn str
+    Disabled -> pure ()
+
+pipelineLogNoLnT :: Text -> PipelineM ()
+pipelineLogNoLnT str = do
+  logType <- view poLogging
+  case logType of
+    Silent   -> psLogs %= (str:)
+    Enabled  -> liftIO $ T.putStr str
+    Disabled -> pure ()
 
 pipelineLogIterations :: Int -> PipelineM ()
-pipelineLogIterations n = pipelineLogNoLn $ "iterations: " ++ show n
+pipelineLogIterations n = pipelineLogNoLn $ "iterations: " <> (show n)
 
+silentLogErrorStr :: String -> PipelineM ()
+silentLogErrorStr err = psErrors %= (pack err:) 
 
 -- TODO: Refactor these into some kind of Maybe monad
 
@@ -36,7 +65,7 @@ withPState selector err action = do
   maybe (pipelineLog err) action substateM 
 
 notAvailableMsg :: String -> String 
-notAvailableMsg str = str ++ " in not available, skipping next step"  
+notAvailableMsg str = str <> " in not available, skipping next step"  
 
 withTypeEnv :: (TypeEnv -> PipelineM ()) -> PipelineM ()
 withTypeEnv = withPState _psTypeEnv $ notAvailableMsg "Type environment"

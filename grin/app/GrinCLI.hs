@@ -111,6 +111,7 @@ pipelineOpts =
   <|> (T <$> transformOpts)
   <|> flg ConfluenceTest "confluence-test" "Checks transformation confluence by generating random two pipelines which reaches the fix points."
   <|> flg PrintErrors "print-errors" "Prints the error log"
+  <|> flg PrintLogs "print-logs" "Prints the silent log messages"
 
 options :: IO Options
 options = execParser $ info

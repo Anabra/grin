@@ -112,6 +112,7 @@ data PipelineStep
   | Lint
   | ConfluenceTest
   | PrintErrors
+  | PrintLogs
   | DebugPipelineState
   deriving (Eq, Show)
 
@@ -123,10 +124,12 @@ pattern DebugTransformation :: (Exp -> Exp) -> PipelineStep
 pattern DebugTransformation t <- DebugTransformationH (H t)
   where DebugTransformation t =  DebugTransformationH (H t)
 
+data LoggingType = Disabled | Enabled | Silent
+
 data PipelineOpts = PipelineOpts
   { _poOutputDir   :: FilePath
   , _poFailOnLint  :: Bool
-  , _poLogging     :: Bool
+  , _poLogging     :: LoggingType
   , _poSaveTypeEnv :: Bool
   , _poStatistics  :: Bool
   }
@@ -135,7 +138,7 @@ defaultOpts :: PipelineOpts
 defaultOpts = PipelineOpts
   { _poOutputDir   = ".grin-output"
   , _poFailOnLint  = True
-  , _poLogging     = True
+  , _poLogging     = Enabled
   , _poSaveTypeEnv = False
   , _poStatistics  = False
   }
@@ -159,7 +162,8 @@ data PState = PState
     -- the type environment parsed from the source code
     , _psTypeAnnots     :: Maybe TypeEnv
     , _psEffectMap      :: Maybe EffectMap
-    , _psErrors         :: [String]
+    , _psErrors         :: [Text]
+    , _psLogs           :: [Text]
     } deriving (Show)
 
 makeLenses ''PState

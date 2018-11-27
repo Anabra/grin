@@ -7,12 +7,14 @@ module Pipeline.Pipeline
 
 import Prelude
 import Control.Monad
-import Data.Text (Text)
+import Data.Text (Text, pack)
+import TextShow
 import Data.Maybe (maybe, fromJust, fromMaybe)
 import Text.Printf
 import Text.Pretty.Simple (pPrint)
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
 import qualified Text.Show.Pretty as PP
+import qualified Data.Text as T
 
 import Pipeline.Eval
 import Pipeline.Definitions
@@ -192,7 +194,11 @@ pipelineStep p = do
     ConfluenceTest  -> confluenceTest
     PrintErrors     -> do 
       errors <- use psErrors
-      pipelineLog $ unlines $ "errors:" : errors
+      pipelineLogT $ T.unlines $ "errors:" : errors
+    PrintLogs     -> do 
+      logs <- use psLogs
+      let logs' = reverse logs
+      pipelineLogT $ T.unlines $ "logs:" : logs'
     DebugPipelineState -> debugPipelineState
   after <- use psExp
   let eff = if before == after then None else ExpChanged
@@ -220,12 +226,12 @@ printEffectMap = do
   effs <- fromMaybe (traceShow "No effect map is available" mempty) <$> use psEffectMap
   pipelineLog $ show $ pretty effs
 
-optimiseAbsProgWith :: IR.HasDataFlowInfo a => Lens' PState (Maybe a) -> String -> PipelineM ()
+optimiseAbsProgWith :: IR.HasDataFlowInfo a => Lens' PState (Maybe a) -> Text -> PipelineM ()
 optimiseAbsProgWith getProg err = do
   mProg <- use getProg
   case mProg of
     Just prog -> getProg._Just %= IR.modifyInfo optimiseAbstractProgram
-    Nothing   -> pipelineLog err
+    Nothing   -> pipelineLogT err
 
 compileAbstractProgram :: (Exp -> Either String prog) -> (Lens' PState (Maybe prog)) -> PipelineM ()
 compileAbstractProgram codeGen accessProg = do
@@ -233,8 +239,8 @@ compileAbstractProgram codeGen accessProg = do
   case codeGen grin of
     Right absProg ->
       accessProg .= Just absProg
-    Left e -> do
-      psErrors %= (e:)
+    Left err -> do
+      silentLogErrorStr err
       accessProg .= Nothing
 
 printAbsProg :: IR.AbstractProgram -> PipelineM ()
@@ -266,7 +272,7 @@ runHPTPure = use psHPTProgram >>= \case
     case typeEnvFromHPTResult result of
       Right te  -> psTypeEnv .= Just te
       Left err  -> do
-        psErrors %= (err :)
+        silentLogErrorStr err
         liftIO $ printf "type-env error: %s" err
         psTypeEnv .= Nothing
 
@@ -282,7 +288,7 @@ runCByPureWith toCByResult = use psCByProgram >>= \case
     case typeEnvFromHPTResult (CBy._hptResult result) of
       Right te  -> psTypeEnv .= Just te
       Left err  -> do
-        psErrors %= (err :)
+        silentLogErrorStr err
         psTypeEnv .= Nothing
 
 runCByPure :: PipelineM ()
@@ -319,7 +325,7 @@ runSharingPureWith toSharingResult = use psSharingProgram >>= \case
     case typeEnvFromHPTResult (Sharing._hptResult result) of
       Right te  -> psTypeEnv .= Just te
       Left err  -> do
-        psErrors %= (err :)
+        silentLogErrorStr err
         psTypeEnv .= Nothing
     
 runSharingPure :: PipelineM ()
@@ -376,57 +382,57 @@ transformationM DeadCodeElimination = do
     e <- use psExp
     case deadFunctionElimination lvaResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
     
     e  <- use psExp
     case deadDataElimination lvaResult cbyResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
 
     e <- use psExp
     case deadVariableElimination lvaResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
 
     e <- use psExp
     case deadParameterElimination lvaResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
 
 transformationM DeadFunctionElimination = do
   e  <- use psExp
   withTyEnvLVA $ \typeEnv lvaResult -> do
     case deadFunctionElimination lvaResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
 
 transformationM DeadVariableElimination = do
   e  <- use psExp
   withTyEnvLVA $ \typeEnv lvaResult -> do
     case deadVariableElimination lvaResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
 
 transformationM DeadParameterElimination = do
   e  <- use psExp
   withTyEnvLVA $ \typeEnv lvaResult -> do
     case deadParameterElimination lvaResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
 
 transformationM DeadDataElimination = do
   e  <- use psExp
   withTyEnvCByLVA $ \typeEnv cbyResult lvaResult -> do
     case deadDataElimination lvaResult cbyResult typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
 
 transformationM SparseCaseOptimisation = do 
   e  <- use psExp
   withTypeEnv $ \typeEnv ->
     case sparseCaseOptimisation typeEnv e of
       Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+      Left  err -> silentLogErrorStr err
   
 transformationM t = do
   --preconditionCheck t
@@ -500,7 +506,7 @@ lintGrin mPhaseName = do
   exp <- use psExp
   mTypeEnv <- use psTypeEnv
   let lintExp@(_, errorMap) = Lint.lint mTypeEnv exp
-  psErrors .= (fmap message $ concat $ Map.elems errorMap)
+  psErrors .= fmap pack (fmap message $ concat $ Map.elems errorMap)
 
   -- print errors
   errors <- use psErrors
@@ -510,8 +516,8 @@ lintGrin mPhaseName = do
       pipelineLog $ show $ prettyLintExp lintExp
       pipelineStep $ HPT PrintAbstractResult
     case mPhaseName of
-      Just phaseName  -> pipelineLog $ printf "error after %s:\n%s" phaseName (unlines errors)
-      Nothing         -> pipelineLog $ printf "error:\n%s" (unlines errors)
+      Just phaseName  -> pipelineLogT $ "error after " <> pack phaseName <> ":\n" <> (T.unlines errors)
+      Nothing         -> pipelineLogT $ "error:\n" <> (T.unlines errors)
     saveTransformationInfo "Lint" $ prettyLintExp lintExp
     mHptResult <- use psHPTResult
     saveTransformationInfo "HPT-Result" mHptResult
@@ -659,6 +665,7 @@ runPipeline o s e m = fmap (second _psExp) $ flip runStateT start $ runReaderT m
     , _psTypeAnnots     = Nothing
     , _psEffectMap      = Nothing
     , _psErrors         = []
+    , _psLogs           = []
     }
 
 -- | Runs the pipeline and returns the last version of the given

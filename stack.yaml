@@ -18,6 +18,7 @@ extra-deps:
   - megaparsec-6.5.0
   - neat-interpolation-0.3.2.2
   - set-extra-1.4.1 
+  - text-show-3.7.5
 
 flags:
   llvm-hs:
