@@ -1,8 +1,10 @@
 module Pipeline.Utils where
 
 import Control.Monad
+import Control.Monad.Trans
 import Control.Monad.IO.Class
 import Control.Monad.State.Class
+import Control.Monad.Trans.Except
 
 import Lens.Micro.Mtl
 
@@ -27,68 +29,6 @@ pipelineLogNoLn str = do
 
 pipelineLogIterations :: Int -> PipelineM ()
 pipelineLogIterations n = pipelineLogNoLn $ "iterations: " ++ show n
-
-
--- TODO: Refactor these into some kind of Maybe monad
--- TODO: This needs some serious refactoring ...
-
-withPState :: (PState -> Maybe a) -> String -> (a -> PipelineM ()) -> PipelineM ()
-withPState selector err action = do
-  substateM <- gets selector
-  maybe (pipelineLog err) action substateM
-
-notAvailableMsg :: String -> String
-notAvailableMsg str = str ++ " in not available, skipping next step"
-
-withTypeEnv :: (TypeEnv -> PipelineM ()) -> PipelineM ()
-withTypeEnv = withPState _psTypeEnv $ notAvailableMsg "Type environment"
-
-withCByResult :: (CByResult -> PipelineM ()) -> PipelineM ()
-withCByResult = withPState _psCByResult $ notAvailableMsg "Created-by analysis result"
-
-withLVAResult :: (LVAResult -> PipelineM ()) -> PipelineM ()
-withLVAResult = withPState _psLVAResult $ notAvailableMsg "Live variable analysis result"
-
-withSharing :: (SharingResult -> PipelineM ()) -> PipelineM ()
-withSharing = withPState _psSharingResult $ notAvailableMsg "Sharing analysis result"
-
-withEffectMap :: (EffectMap -> PipelineM ()) -> PipelineM ()
-withEffectMap = withPState _psEffectMap $ notAvailableMsg "Effect map"
-
-withTyEnvCByLVA ::
-  (TypeEnv -> CByResult -> LVAResult -> PipelineM ()) ->
-  PipelineM ()
-withTyEnvCByLVA f =
-  withTypeEnv $ \te ->
-    withCByResult $ \cby ->
-      withLVAResult $ \lva ->
-        f te cby lva
-
-withEffMapTyEnvCByLVA ::
-  (EffectMap -> TypeEnv -> CByResult -> LVAResult -> PipelineM ()) ->
-  PipelineM ()
-withEffMapTyEnvCByLVA f = withEffectMap (withTyEnvCByLVA . f)
-
-withTyEnvLVA ::
-  (TypeEnv -> LVAResult -> PipelineM ()) ->
-  PipelineM ()
-withTyEnvLVA f =
-  withTypeEnv $ \te ->
-    withLVAResult $ \lva ->
-      f te lva
-
-withEffMapTyEnvLVA ::
-  (EffectMap -> TypeEnv -> LVAResult -> PipelineM ()) ->
-  PipelineM ()
-withEffMapTyEnvLVA f = withEffectMap (withTyEnvLVA . f)
-
-withTyEnvSharing ::
-  (TypeEnv -> SharingResult -> PipelineM ()) ->
-  PipelineM ()
-withTyEnvSharing f =
-  withTypeEnv $ \te ->
-    withSharing $ \shLocs ->
-      f te shLocs
 
 defaultOptimizations :: [Transformation]
 defaultOptimizations =
@@ -165,3 +105,46 @@ printingSteps =
 
 isPrintingStep :: PipelineStep -> Bool
 isPrintingStep = flip elem printingSteps
+
+getExp :: ExceptT String PipelineM Exp
+getExp = lift . use $ psExp
+
+getTypeEnv :: ExceptT String PipelineM TypeEnv
+getTypeEnv = do
+  let err = "Type environment is not available"
+  typeEnvM <- lift $ use psTypeEnv
+  maybe (throwE err) return typeEnvM
+
+getEffectMap :: ExceptT String PipelineM EffectMap
+getEffectMap = do
+  let err = "Effect map is not available"
+  effMapM <- lift $ use psEffectMap
+  maybe (throwE err) return effMapM
+
+getCByResult :: ExceptT String PipelineM CByResult
+getCByResult = do
+  let err = "Created-by analysis result is not available"
+  cbyResultM <- lift $ use psCByResult
+  maybe (throwE err) return cbyResultM
+
+getLVAResult :: ExceptT String PipelineM LVAResult
+getLVAResult = do
+  let err = "Live variable analysis result is not available"
+  lvaResultM <- lift $ use psLVAResult
+  maybe (throwE err) return lvaResultM
+
+getSharingResult :: ExceptT String PipelineM SharingResult
+getSharingResult = do
+  let err = "Sharing analysis result is not available"
+  shResultM <- lift $ use psSharingResult
+  maybe (throwE err) return shResultM
+
+runTransformation :: ExceptT String PipelineM Exp -> PipelineM ()
+runTransformation trfM = do
+  expE <- runExceptT trfM
+  case expE of
+    Right e' -> psExp .= e' >> psTransStep %= (+1)
+    Left err -> pipelineLog $ err ++ ", skipping next step"
+
+exceptT :: Monad m => Either e a -> ExceptT e m a
+exceptT = ExceptT . pure

@@ -27,6 +27,8 @@ import Grin.Grin
 import Grin.Pretty
 import Grin.TypeEnv
 import Grin.EffectMap
+import Pipeline.Utils
+import Pipeline.Definitions
 import Transformations.Util
 import AbstractInterpretation.LVAUtil as LVA
 
@@ -35,6 +37,14 @@ type Trf = Except String
 
 runTrf :: Trf a -> Either String a
 runTrf = runExcept
+
+deadFunctionEliminationM :: ExceptT String PipelineM Exp 
+deadFunctionEliminationM = do 
+  exp       <- getExp
+  typeEnv   <- getTypeEnv
+  effectMap <- getEffectMap
+  lvaResult <- getLVAResult
+  exceptT $ deadFunctionElimination lvaResult effectMap typeEnv exp
 
 deadFunctionElimination :: LVAResult -> EffectMap -> TypeEnv -> Exp -> Either String Exp
 deadFunctionElimination lvaResult effMap tyEnv = runTrf .

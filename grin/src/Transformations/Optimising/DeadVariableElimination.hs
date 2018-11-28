@@ -27,6 +27,8 @@ import Grin.Grin
 import Grin.Pretty
 import Grin.TypeEnv
 import Grin.EffectMap
+import Pipeline.Utils
+import Pipeline.Definitions
 import Transformations.Util
 import AbstractInterpretation.LVAUtil as LVA
 
@@ -49,6 +51,15 @@ type Trf = ExceptT String (State DeletedEntities)
 
 runTrf :: Trf a -> Either String a
 runTrf = flip evalState mempty . runExceptT
+
+deadVariableEliminationM :: ExceptT String PipelineM Exp 
+deadVariableEliminationM = do 
+  exp       <- getExp
+  typeEnv   <- getTypeEnv
+  effectMap <- getEffectMap
+  lvaResult <- getLVAResult
+  exceptT $ deadVariableElimination lvaResult effectMap typeEnv exp
+
 
 -- P and F nodes are handled by Dead Data Elimination
 deadVariableElimination :: LVAResult -> EffectMap -> TypeEnv -> Exp -> Either String Exp

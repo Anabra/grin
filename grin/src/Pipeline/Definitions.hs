@@ -140,7 +140,7 @@ defaultOpts = PipelineOpts
   , _poStatistics  = False
   }
 
-type PipelineM a = ReaderT PipelineOpts (StateT PState IO) a
+type PipelineM = ReaderT PipelineOpts (StateT PState IO)
 data PState = PState
     { _psSrc            :: Maybe Text
     , _psExp            :: Exp

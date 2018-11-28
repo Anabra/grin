@@ -11,7 +11,15 @@ import Control.Monad.Trans.Except
 import Grin.Grin
 import Grin.Pretty
 import Grin.TypeEnv
+import Pipeline.Utils
+import Pipeline.Definitions
 import Transformations.Util
+
+sparseCaseOptimisationM :: ExceptT String PipelineM Exp
+sparseCaseOptimisationM = do
+  exp      <- getExp
+  typeEnv  <- getTypeEnv
+  exceptT $ sparseCaseOptimisation typeEnv exp
 
 sparseCaseOptimisation :: TypeEnv -> Exp -> Either String Exp
 sparseCaseOptimisation TypeEnv{..} = runExcept . anaM builder where

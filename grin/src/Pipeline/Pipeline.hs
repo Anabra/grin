@@ -134,6 +134,7 @@ transformation n = \case
 pipelineStep :: PipelineStep -> PipelineM PipelineEff
 pipelineStep p = do
   case p of
+    T{}                  -> pure () -- will log separately
     Pass{}               -> pure () -- each pass step will be printed anyway
     _ | isPrintingStep p -> pipelineLog $ printf "PipelineStep: %-35s" (show p)
     _                    -> pipelineLogNoLn $ printf "PipelineStep: %-35s" (show p)
@@ -174,7 +175,9 @@ pipelineStep p = do
     Eff eff -> case eff of
       CalcEffectMap   -> calcEffectMap
       PrintEffectMap  -> printEffectMap
-    T t             -> transformationM t
+    T t             -> do
+      transformationM t
+      pipelineLogNoLn $ printf "PipelineStep: %-35s" (show p)
     Pass pass       -> mapM_ pipelineStep pass
     PrintGrin d     -> printGrinM d
     PureEval        -> pureEval
@@ -362,71 +365,30 @@ statistics = do
   saveTransformationInfo "Statistics" $ Statistics.statistics exp
 
 transformationM :: Transformation -> PipelineM ()
-transformationM NonSharedElimination = do
-  e <- use psExp
-  withTyEnvSharing $ \tyEnv shRes -> do
-    let e' = nonSharedElimination shRes tyEnv e
-    psExp .= e'
-    psTransStep %= (+1)
+transformationM NonSharedElimination =
+  runTransformation nonSharedEliminationM
 
+transformationM DeadCodeElimination = void . pipelineStep $ Pass
+  [ T DeadFunctionElimination
+  , T DeadDataElimination
+  , T DeadVariableElimination
+  , T DeadParameterElimination
+  ]
 
-transformationM DeadCodeElimination = do
-  withEffMapTyEnvCByLVA $ \effMap typeEnv cbyResult lvaResult -> do
+transformationM DeadFunctionElimination =
+  runTransformation deadFunctionEliminationM
 
-    e <- use psExp
-    case deadFunctionElimination lvaResult effMap typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+transformationM DeadVariableElimination =
+  runTransformation deadVariableEliminationM
 
-    e  <- use psExp
-    case deadDataElimination lvaResult cbyResult typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+transformationM DeadParameterElimination =
+  runTransformation deadParameterEliminationM
 
-    e <- use psExp
-    case deadVariableElimination lvaResult effMap typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
-
-    e <- use psExp
-    case deadParameterElimination lvaResult typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
-
-transformationM DeadFunctionElimination = do
-  e  <- use psExp
-  withEffMapTyEnvLVA $ \effMap typeEnv lvaResult -> do
-    case deadFunctionElimination lvaResult effMap typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
-
-transformationM DeadVariableElimination = do
-  e  <- use psExp
-  withEffMapTyEnvLVA $ \effMap typeEnv lvaResult -> do
-    case deadVariableElimination lvaResult effMap typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
-
-transformationM DeadParameterElimination = do
-  e  <- use psExp
-  withTyEnvLVA $ \typeEnv lvaResult -> do
-    case deadParameterElimination lvaResult typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
-
-transformationM DeadDataElimination = do
-  e  <- use psExp
-  withTyEnvCByLVA $ \typeEnv cbyResult lvaResult -> do
-    case deadDataElimination lvaResult cbyResult typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+transformationM DeadDataElimination =
+  runTransformation deadDataEliminationM
 
 transformationM SparseCaseOptimisation = do
-  e  <- use psExp
-  withTypeEnv $ \typeEnv ->
-    case sparseCaseOptimisation typeEnv e of
-      Right e'  -> psExp .= e' >> psTransStep %= (+1)
-      Left  err -> psErrors %= (err:)
+  runTransformation sparseCaseOptimisationM
 
 transformationM t = do
   --preconditionCheck t

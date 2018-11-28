@@ -22,6 +22,9 @@ import Grin.Grin
 import Grin.Pretty
 import Grin.TypeEnv
 
+import Pipeline.Utils
+import Pipeline.Definitions
+
 import AbstractInterpretation.CByUtil
 import AbstractInterpretation.CByResult
 import AbstractInterpretation.LVAResult
@@ -57,6 +60,13 @@ getTag t@(Tag ty n) lv = do
       modify $ Map.insert (t,lv) t'
       return t'
 
+deadDataEliminationM :: ExceptT String PipelineM Exp 
+deadDataEliminationM = do 
+  exp       <- getExp
+  typeEnv   <- getTypeEnv
+  cbyResult <- getCByResult
+  lvaResult <- getLVAResult
+  exceptT $ deadDataElimination lvaResult cbyResult typeEnv exp
 
 deadDataElimination :: LVAResult -> CByResult -> TypeEnv ->  Exp -> Either String Exp
 deadDataElimination lvaResult cbyResult tyEnv e = execTrf e $

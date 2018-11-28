@@ -18,6 +18,8 @@ import Control.Monad.Trans.Except
 
 import Grin.Grin
 import Grin.TypeEnvDefs
+import Pipeline.Utils
+import Pipeline.Definitions
 import Transformations.Util
 import AbstractInterpretation.LVAUtil
 
@@ -25,6 +27,13 @@ type Trf = Except String
 
 runTrf :: Trf a -> Either String a
 runTrf = runExcept
+
+deadParameterEliminationM :: ExceptT String PipelineM Exp
+deadParameterEliminationM = do
+  exp       <- getExp
+  typeEnv   <- getTypeEnv
+  lvaResult <- getLVAResult
+  exceptT $ deadParameterElimination lvaResult typeEnv exp
 
 -- P and F nodes are handled by Dead Data Elimination
 deadParameterElimination :: LVAResult -> TypeEnv -> Exp -> Either String Exp
