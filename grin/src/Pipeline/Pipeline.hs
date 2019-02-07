@@ -9,6 +9,7 @@ module Pipeline.Pipeline
   , Path(..)
   , pattern HPTPass
   , pattern PrintGrin
+  , pattern FullPrintGrin
   , pattern DeadCodeElimination
   , pipeline
   , optimize
@@ -33,7 +34,7 @@ import Grin.EffectMap
 import Pipeline.Optimizations
 import qualified Grin.Statistics as Statistics
 import Grin.Parse
-import Grin.Pretty(showWide)
+import Grin.Pretty(showWide, prettyWithExternals)
 import Transformations.CountVariableUse
 import Transformations.GenerateEval
 import qualified Transformations.Simplifying.Vectorisation2 as Vectorisation2
@@ -182,6 +183,7 @@ data PipelineStep
   | T Transformation
   | Pass [PipelineStep]
   | PrintGrinH (Hidden (Doc -> Doc))
+  | FullPrintGrinH (Hidden (Doc -> Doc))
   | PureEval
   | JITLLVM
   | PrintAST
@@ -222,6 +224,10 @@ data Path
 pattern PrintGrin :: (Doc -> Doc) -> PipelineStep
 pattern PrintGrin c <- PrintGrinH (H c)
   where PrintGrin c =  PrintGrinH (H c)
+
+pattern FullPrintGrin :: (Doc -> Doc) -> PipelineStep
+pattern FullPrintGrin c <- FullPrintGrinH (H c)
+  where FullPrintGrin c =  FullPrintGrinH (H c)
 
 pattern DebugTransformation :: (Exp -> Exp) -> PipelineStep
 pattern DebugTransformation t <- DebugTransformationH (H t)
@@ -418,6 +424,7 @@ pipelineStep p = do
     T t             -> transformation t
     Pass pass       -> mapM_ pipelineStep pass
     PrintGrin d     -> printGrinM d
+    FullPrintGrin d -> fullPrintGrinM d
     PureEval        -> pureEval
     JITLLVM         -> jitLLVM
     SaveLLVM path   -> saveLLVM path
@@ -606,6 +613,11 @@ pureEval = do
 
 printGrinM :: (Doc -> Doc) -> PipelineM ()
 printGrinM color = do
+  Program exts defs <- use psExp
+  pipelineLog $ showWide $ color $ prettyWithExternals exts $ Program [] defs
+
+fullPrintGrinM :: (Doc -> Doc) -> PipelineM ()
+fullPrintGrinM color = do
   e <- use psExp
   pipelineLog $ showWide $ color $ pretty e
 
