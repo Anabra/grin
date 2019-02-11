@@ -813,6 +813,8 @@ randomPipelineM seed = do
     runNameIntro = void . pipelineStep $ Pass
       [ T ProducerNameIntroduction
       , T BindNormalisation
+      , T BindingPatternSimplification
+      , T BindNormalisation
       ]
 
     -- cleanup after producer name intro
@@ -1001,6 +1003,8 @@ optimizeWithM pre trans post = do
               [ CopyPropagation
               , SimpleDeadVariableElimination
               , ProducerNameIntroduction
+              , BindNormalisation
+              , BindingPatternSimplification
               , BindNormalisation
               , UnitPropagation
               ]
