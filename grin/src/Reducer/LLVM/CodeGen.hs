@@ -18,8 +18,14 @@ import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.List as List
+import qualified Data.Text as Text
+import qualified Data.ByteString.Short as ShortByteString
+import Data.String (fromString)
+import Text.Printf (printf)
+import Lens.Micro.Mtl
 
 import LLVM.AST hiding (callingConvention, functionAttributes)
+import LLVM.AST.AddrSpace
 import LLVM.AST.Type as LLVM
 import qualified LLVM.AST.Typed as LLVM
 import LLVM.AST.Constant as C hiding (Add, ICmp)
@@ -46,6 +52,8 @@ import Reducer.LLVM.PrimOps
 import Reducer.LLVM.TypeGen
 import Reducer.LLVM.InferType
 
+
+
 debugMode :: Bool
 debugMode = True
 
@@ -55,12 +63,25 @@ toLLVM fname mod = withContext $ \ctx -> do
   BS.writeFile fname llvm
   pure llvm
 
-codeGenLit :: Lit -> C.Constant
+codeGenLit :: Lit -> CG C.Constant
 codeGenLit = \case
-  LInt64 v  -> Int {integerBits=64, integerValue=fromIntegral v}
-  LWord64 v -> Int {integerBits=64, integerValue=fromIntegral v}
-  LFloat v  -> C.Float {floatValue=F.Single v}
-  LBool v   -> Int {integerBits=1, integerValue=if v then 1 else 0}
+  LInt64 v  -> pure $ Int {integerBits=64, integerValue=fromIntegral v}
+  LWord64 v -> pure $ Int {integerBits=64, integerValue=fromIntegral v}
+  LFloat v  -> pure $ C.Float {floatValue=F.Single v}
+  LBool v   -> pure $ Int {integerBits=1, integerValue=if v then 1 else 0}
+  LChar v   -> pure $ Int {integerBits=8, integerValue=fromIntegral $ fromEnum v}
+  LString v -> C.GlobalReference stringType <$> strName v
+
+strName :: Text.Text -> CG AST.Name
+strName str = do
+  mName <- use $ envStringMap . at str
+  case mName of
+    Just n -> pure $ Name $ fromString $ Text.unpack n
+    Nothing -> do
+      counter <- envStringCounter <<%= succ
+      let n = "str." ++ show counter
+      envStringMap %= Map.insert str (Text.pack n)
+      pure $ Name $ fromString $ n
 
 codeGenVal :: Val -> CG Operand
 codeGenVal val = case val of
@@ -95,7 +116,7 @@ codeGenVal val = case val of
 
   ValTag tag  -> ConstantOperand <$> getTagId tag
   Unit        -> pure unit
-  Lit lit     -> pure . ConstantOperand . codeGenLit $ lit
+  Lit lit     -> ConstantOperand <$> codeGenLit lit
   Var name    -> do
                   Map.lookup name <$> gets _constantMap >>= \case
                     -- QUESTION: what is this?
@@ -111,7 +132,7 @@ codeGenVal val = case val of
 getCPatConstant :: CPat -> CG Constant
 getCPatConstant = \case
   TagPat  tag       -> getTagId tag
-  LitPat  lit       -> pure $ codeGenLit lit
+  LitPat  lit       -> codeGenLit lit
   NodePat tag args  -> getTagId tag
   DefaultPat        -> pure C.TokenNone
 
@@ -122,7 +143,10 @@ getCPatName = \case
     LInt64 v  -> "int_" <> showTS v
     LWord64 v -> "word_" <> showTS v
     LBool v   -> "bool_" <> showTS v
+    LChar v   -> "char_" <> showTS v
+    LString v -> error "pattern match on string is not supported"
     LFloat v  -> error "pattern match on float is not supported"
+    other     -> error $ "pattern match not implemented: " ++ show other
   NodePat tag _ -> tagName tag
   DefaultPat  -> "default"
  where
@@ -138,7 +162,7 @@ getCPatName = \case
 toModule :: Env -> AST.Module
 toModule Env{..} = defaultModule
   { moduleName = "basic"
-  , moduleDefinitions = heapPointerDef : reverse _envDefinitions
+  , moduleDefinitions = heapPointerDef : (stringDefinitions) ++ (reverse _envDefinitions)
   }
   where
     heapPointerDef = GlobalDefinition globalVariableDefaults
@@ -146,6 +170,32 @@ toModule Env{..} = defaultModule
       , Global.type'  = i64
       , initializer   = Just $ Int 64 0
       }
+
+    stringDefinitions = concat
+      [ [ GlobalDefinition globalVariableDefaults
+            { name = valAstName
+            , Global.type' = ArrayType (fromIntegral (length stringVal)) i8
+            , initializer = Just $ C.Array i8 $ [Int 8 $ fromIntegral $ fromEnum v0 | v0 <- stringVal]
+            }
+        , GlobalDefinition globalVariableDefaults
+            { name = llvmName
+            , Global.type' = stringStructType
+            , initializer = Just $ C.Struct Nothing False -- TODO: Set struct name
+                [ C.GetElementPtr
+                    { inBounds = True
+                    , address = GlobalReference (PointerType (ArrayType (fromIntegral (length stringVal)) i8) (AddrSpace 0)) valAstName
+                    , indices = [Int {integerBits=64, integerValue=0}, Int {integerBits=64, integerValue=0}]
+                    }
+                , Int 64 $ fromIntegral $ length stringVal
+                ]
+            }
+        ]
+      | (stringVal0, astName0) <- Map.toList _envStringMap
+      , let stringVal = Text.unpack stringVal0
+      , let astName = Text.unpack astName0
+      , let valAstName = Name $ fromString $ astName ++ ".val"
+      , let llvmName = Name $ fromString astName
+      ]
 
 {-
   type of:
@@ -194,12 +244,16 @@ codeGen typeEnv exp = toModule $ flip execState (emptyEnv {_envTypeEnv = typeEnv
     SAppF name args -> do
       (retType, argTypes) <- getFunctionType name
       operands <- mapM codeGenVal args
-      operandsTypes <- mapM (\x -> toCGType <$> typeOfVal x) args
+      operandsTypes <- mapM (fmap toCGType . typeOfVal) args
       -- convert values to function argument type
       convertedArgs <- sequence $ zipWith3 codeGenValueConversion operandsTypes operands argTypes
-      if isExternalName (externals exp) name
-        then codeGenPrimOp name args convertedArgs
-        else do
+      let findExternalName :: TypeEnv.Name -> Maybe External
+          findExternalName n = List.find ((n ==) . eName) (externals exp)
+      case findExternalName name of
+        Just e -> codeExternal e convertedArgs >>= \case
+          Left err -> error $ err ++ show (name, args)
+          Right r  -> pure r
+        Nothing -> do
           -- call to top level functions
           let functionType      = FunctionType
                 { resultType    = cgLLVMType retType
@@ -282,7 +336,7 @@ codeGen typeEnv exp = toModule $ flip execState (emptyEnv {_envTypeEnv = typeEnv
 
     ProgramF exts defs -> do
       -- register prim fun lib
-      registerPrimFunLib
+      mapM registerPrimFunLib exts
       sequence_ (map snd defs) >> pure (O unitCGType unit)
 
     SFetchIF name Nothing -> do
@@ -352,6 +406,15 @@ codeGenStoreNode val nodeLocation = do
       }]
     pure $ (unitCGType, unit)
   pure ()
+
+convertStringOperand t o = case (cgType t,o) of
+  (T_SimpleType T_String, ConstantOperand stringRef@(GlobalReference{}))
+    -> ConstantOperand $ C.GetElementPtr
+        { inBounds = False
+        , address = stringRef
+        , indices = [Int {integerBits=64, integerValue=0}, Int {integerBits=64, integerValue=0}]
+        }
+  _ -> o
 
 codeGenCase :: Operand -> [(Alt, CG Result)] -> (CPat -> CG ()) -> CG Result
 codeGenCase opVal alts bindingGen = do
@@ -435,6 +498,7 @@ codeGenTagSwitch tagVal nodeSet tagAltGen | Map.size nodeSet > 1 = do
     activeBlock lastAltBlock
     -- HINT: convert alt result to common type
     convertedAltOp <- codeGenValueConversion altCGTy altOp resultCGType
+
     closeBlock $ Br
       { dest      = switchExit
       , metadata' = []
@@ -509,9 +573,16 @@ external retty label argtys = modify' (\env@Env{..} -> env {_envDefinitions = de
     }
 
 -- available primitive functions
-registerPrimFunLib :: CG ()
-registerPrimFunLib = do
-  external VoidType (mkName "_prim_int_print") [(i64, mkName "x")]
+registerPrimFunLib :: External -> CG ()
+registerPrimFunLib ext = do
+  external
+    (toLLVMType $ eRetType ext)
+    (mkName $ Text.unpack $ unNM $ eName ext)
+    [ (toLLVMType t, mkName ("x" ++ show n)) | (t,n) <- (eArgsType ext) `zip` [1..] ]
+  where
+    toLLVMType = \case
+      TySimple t -> typeGenSimpleType t
+      rest       -> error $ "Unsupported type:" ++ show rest
 
 errorBlock = do
   activeBlock $ mkName "error_block"
