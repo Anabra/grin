@@ -11,6 +11,7 @@ module Pipeline.Pipeline
   , pattern PrintGrin
   , pattern FullPrintGrin
   , pattern DeadCodeElimination
+  , pattern DeadDataPass
   , pipeline
   , optimize
   , optimizeWith
@@ -187,6 +188,7 @@ data PipelineStep
   | PrintGrinH (Hidden (Doc -> Doc))
   | FullPrintGrinH (Hidden (Doc -> Doc))
   | PureEval
+  | PureEvalWithStats
   | JITLLVM
   | PrintAST
   | SaveLLVM Bool FilePath
@@ -194,6 +196,7 @@ data PipelineStep
   | SaveBinary String
   | DebugTransformationH (Hidden (Exp -> Exp))
   | Statistics
+  | PrintStatistics
   | PrintTypeAnnots
   | PrintTypeEnv
   | SaveTypeEnv
@@ -209,6 +212,28 @@ pattern DeadCodeElimination = Pass
   , T DeadDataElimination
   , T DeadVariableElimination
   , T DeadParameterElimination
+  ]
+
+pattern DeadDataPass :: PipelineStep
+pattern DeadDataPass = Pass
+  -- pre
+  [ T ProducerNameIntroduction
+  , T BindNormalisation
+  , T BindingPatternSimplification
+  , T BindNormalisation
+  , T UnitPropagation
+
+  -- dde
+  , T DeadDataElimination
+
+  -- post
+  , T CopyPropagation
+  , T SimpleDeadVariableElimination
+  , T BindNormalisation
+  , T UnitPropagation
+
+  , SaveGrin (Rel "DeadDataPass.grin")
+  , Statistics
   ]
 
 pattern HPTPass :: PipelineStep
@@ -427,6 +452,7 @@ pipelineStep p = do
     PrintGrin d     -> printGrinM d
     FullPrintGrin d -> fullPrintGrinM d
     PureEval        -> pureEval
+    PureEvalWithStats -> pureEvalWithStats
     JITLLVM         -> jitLLVM
     SaveLLVM relPath path -> saveLLVM relPath path
     SaveGrin path   -> saveGrin path
@@ -437,6 +463,7 @@ pipelineStep p = do
     SaveTypeEnv     -> saveTypeEnv
     DebugTransformation t -> debugTransformation t
     Statistics      -> statistics
+    PrintStatistics -> printStatistics
     Lint            -> lintGrin Nothing
     ConfluenceTest  -> confluenceTest
     PrintErrors     -> do
@@ -603,6 +630,11 @@ statistics = do
   exp <- use psExp
   saveTransformationInfo "Statistics" $ Statistics.statistics exp
 
+printStatistics :: PipelineM ()
+printStatistics = do
+  exp <- use psExp
+  pipelineLog $ show $ pretty $ Statistics.statistics exp
+
 pureEval :: PipelineM ()
 pureEval = do
   e <- use psExp
@@ -610,6 +642,15 @@ pureEval = do
     hSetBuffering stdout NoBuffering
     evalProgram PureReducer e
   pipelineLog $ show $ pretty val
+
+pureEvalWithStats :: PipelineM ()
+pureEvalWithStats = do
+  e <- use psExp
+  (val, stats) <- liftIO $ do
+    hSetBuffering stdout NoBuffering
+    pureEvalWithRTStats e
+  pipelineLog $ show $ pretty val
+  pipelineLog $ show $ pretty stats
 
 printGrinM :: (Doc -> Doc) -> PipelineM ()
 printGrinM color = do
@@ -1084,6 +1125,8 @@ defaultOptimizations =
   , ArityRaising
   , InlineApply
   , LateInlining
+  ] ++
+  [ -- DeadDataElimination
   ]
 
 debugPipeline :: [PipelineStep] -> [PipelineStep]

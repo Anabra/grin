@@ -12,6 +12,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Bimap as Bimap
 import qualified Data.Foldable
+import Data.Maybe
 import Data.Function (on)
 import GHC.Generics (Generic)
 import System.IO.Unsafe
@@ -224,12 +225,20 @@ evalInstruction = \case
       let mergedFields = mconcat . (map Data.Foldable.fold) . Map.elems $ tagMap
       selectReg dstReg.simpleType %= (mappend mergedFields)
 
+    EveryNthField n -> do
+      tagMap <- use $ selectTagMap srcReg
+      -- the union of the value sets of all fields
+      let mergedFields = mconcat . (mapMaybe (V.!? n)) . Map.elems $ tagMap
+      selectReg dstReg.simpleType %= (mappend mergedFields)
+
   Extend {..} -> do
     -- TODO: support all selectors
     value <- use $ selectReg srcReg.simpleType
     case dstSelector of
       NodeItem tag itemIndex -> selectTagMap dstReg.at tag.non mempty.ix itemIndex %= (mappend value)
       AllFields -> selectTagMap dstReg %= (Map.map (V.map (mappend value)))
+      EveryNthField n -> let modifier ix = if ix == n then mappend value else id in
+        selectTagMap dstReg %= (Map.map (V.imap modifier))
       ConditionAsSelector cond -> case cond of
         -- selects all fields/simpleType having at least one possible value satisfying the predicate
         All (ValueIn    rng) -> do
@@ -314,3 +323,17 @@ evalAbstractProgram a = unsafePerformIO $ evalAbstractProgramIO a
 
 continueAbstractProgramWith :: ComputerState -> AbstractProgram -> AbstractInterpretationResult
 continueAbstractProgramWith s p = unsafePerformIO $ continueAbstractProgramWithIO s p
+
+{- for LVA CodeGen
+
+-- Tests whether the node in the given register can fail on a pattern match with a given set of tag.
+canFailOnThen :: IR.Reg -> Set IR.Tag -> [IR.Instruction] -> IR.Instruction
+canFailOnThen r patTags is = IR.If { condition = IR.NotIn patTags, srcReg = r, instructions = is }
+
+canFailOnThenM :: IR.Reg -> Set IR.Tag -> CG () -> CG ()
+canFailOnThenM r patTags actionM = do
+  is <- codeGenBlock_ actionM
+  emit $ canFailOnThen r patTags is
+
+
+-}
