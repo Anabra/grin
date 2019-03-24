@@ -1,9 +1,11 @@
-{-# LANGUAGE LambdaCase, TupleSections, TemplateHaskell, OverloadedStrings, RecordWildCards #-}
+{-# LANGUAGE MultiWayIf, LambdaCase, TupleSections, TemplateHaskell, OverloadedStrings, RecordWildCards #-}
 module AbstractInterpretation.LiveVariable.CodeGen where
 
 import Control.Monad.State
 
 import Data.Int
+import Data.Set (Set)
+import qualified Data.Set.Extra as Set
 
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -46,6 +48,16 @@ isLiveThenM r actionM = do
   is <- codeGenBlock_ actionM
   emit $ isLiveThen r is
 
+-- Tests whether the node in the given register can fail on a pattern match with a given set of tag.
+-- Due to the semantics of the NotIn condition, any register with any basic value will also pass the test.
+canFailOnThen :: IR.Reg -> Set IR.Tag -> [IR.Instruction] -> IR.Instruction
+canFailOnThen r patTags is = IR.If { condition = IR.AnyNotIn patTags, srcReg = r, instructions = is }
+
+canFailOnThenM :: IR.Reg -> Set IR.Tag -> CG () -> CG ()
+canFailOnThenM r patTags actionM = do
+  is <- codeGenBlock_ actionM
+  emit $ canFailOnThen r patTags is
+
 live :: LivenessId
 live = -1
 
@@ -62,6 +74,16 @@ setTagLive tag reg = do
   emit IR.Extend
     { srcReg      = tmp
     , dstSelector = IR.NodeItem tag 0
+    , dstReg      = reg
+    }
+
+setAllTagsLive :: IR.Reg -> CG ()
+setAllTagsLive reg = do
+  tmp <- newReg
+  setBasicValLive tmp
+  emit IR.Extend
+    { srcReg      = tmp
+    , dstSelector = IR.EveryNthField 0
     , dstReg      = reg
     }
 
@@ -196,7 +218,7 @@ codeGenM e = (cata folder >=> const setMainLive) e
   where
   folder :: ExpF (CG Result) -> CG Result
   folder = \case
-    ProgramF exts defs -> sequence_ defs >> pure Z
+    ProgramF exts defs -> mapM_ addExternal exts >> sequence_ defs >> pure Z
 
     DefF name args body -> do
       (funResultReg, funArgRegs) <- getOrAddFunRegs name $ length args
@@ -219,6 +241,7 @@ codeGenM e = (cata folder >=> const setMainLive) e
             addReg name r
           _ -> error $ "pattern mismatch at LVA bind codegen, expected Unit got " ++ show lpat
         R r -> case lpat of
+          -- QUESTION: should this just throw an error?
           Unit  -> setBasicValLive r
           Lit{} -> setBasicValLive r
           Var name -> do
@@ -228,6 +251,7 @@ codeGenM e = (cata folder >=> const setMainLive) e
           ConstTagNode tag args -> do
             irTag <- getTag tag
             setTagLive irTag r
+            canFailOnThenM r (Set.singleton irTag) (setAllTagsLive r)
             bindInstructions <- codeGenBlock_ $ forM (zip [1..] args) $ \(idx, arg) ->
               case arg of
                 Var name -> do
@@ -298,6 +322,25 @@ codeGenM e = (cata folder >=> const setMainLive) e
             -- restoring scrut reg
             addReg scrutName origScrutReg
 
+      let altPats = Set.fromList [cpat | A cpat _ <- alts]
+          altTags = Set.fromList [tag  | A (NodePat tag _) _ <- alts]
+          isLiteral = null altTags -- NOTE: single #default pattern does not matter
+
+      altIRTags <- Set.mapM getTag altTags
+
+         -- if a #default pattern is present, the pattern match cannot fail
+      if | DefaultPat `Set.member` altPats -> doNothing
+         -- if the scrutinee is a bool literal, and both #True and #False are present,
+         -- the pattern match cannot fail
+         | isLiteral
+         , BoolPat True  `Set.member` altPats
+         , BoolPat False `Set.member` altPats
+         -> doNothing
+         -- any other literal pattern match can fail
+         | isLiteral -> setBasicValLive valReg
+         -- node pattern matches can fail based on the present pattern tags
+         | otherwise -> canFailOnThenM valReg altIRTags (setAllTagsLive valReg)
+
       forM_ alts $ \(A cpat altM) -> do
 
         let codeGenAltExists tag before = codeGenAlt scrutRegMapping
@@ -338,14 +381,21 @@ codeGenM e = (cata folder >=> const setMainLive) e
             caseResultReg `isLiveThenM` setBasicValLive valReg
             altM >>= processAltResult
 
-          DefaultPat -> do
-            tags <- Set.fromList <$> sequence [getTag tag | A (NodePat tag _) _ <- alts]
-            altInstructions <- codeGenAltNotIn tags (const doNothing)
-            emit IR.If
-              { condition    = IR.AnyNotIn tags
-              , srcReg       = valReg
-              , instructions = altInstructions
-              }
+          DefaultPat
+            -- We do not store literal type info,
+            -- so the "NotIn" condition will not trigger in case of a literal.
+            -- We have to generate the code itself manually.
+            | isLiteral -> do
+              caseResultReg `isLiveThenM` setBasicValLive valReg
+              altM >>= processAltResult
+            | otherwise -> do
+              tags <- Set.fromList <$> sequence [getTag tag | A (NodePat tag _) _ <- alts]
+              altInstructions <- codeGenAltNotIn tags (const doNothing)
+              emit IR.If
+                { condition    = IR.AnyNotIn tags
+                , srcReg       = valReg
+                , instructions = altInstructions
+                }
 
           _ -> error $ "LVA does not support the following case pattern: " ++ show cpat
       pure $ R caseResultReg
@@ -433,11 +483,15 @@ codeGenM e = (cata folder >=> const setMainLive) e
     SBlockF exp -> exp
 
 codeGenPrimOp :: Name -> IR.Reg -> [IR.Reg] -> CG ()
-codeGenPrimOp name funResultReg funArgRegs
-  | name == "_prim_int_print" = mapM_ setBasicValLive funArgRegs
-  | otherwise = do
-    allArgsLive <- codeGenBlock_ $ mapM_ setBasicValLive funArgRegs
-    emit $ funResultReg `isLiveThen` allArgsLive
+codeGenPrimOp name funResultReg funArgRegs = do
+  mExt <- getExternal name
+  let isEffectfulExternal = maybe False eEffectful mExt
+  if isEffectfulExternal
+    then
+      mapM_ setBasicValLive funArgRegs
+    else do
+      allArgsLive <- codeGenBlock_ $ mapM_ setBasicValLive funArgRegs
+      emit $ funResultReg `isLiveThen` allArgsLive
 
 codeGenAlt :: (Maybe Name, IR.Reg) ->
               (IR.Reg -> Name -> CG IR.Reg) ->

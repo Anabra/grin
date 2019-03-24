@@ -96,6 +96,7 @@ pipelineOpts =
   <|> flg (FullPrintGrin id) "full-print-grin" "Prints the actual grin code including external functions"
   <|> flg PrintTypeAnnots "print-type-annots" "Prints the type env calculated from the annotations in the source"
   <|> flg PrintTypeEnv "te" "Prints type env"
+  <|> flg PrintStatistics "ps" "Prints statistics"
   <|> flg' (Pass [HPT Compile, HPT RunPure]) 't' "hpt" "Compiles and runs the heap-points-to analysis"
   <|> flg' (Pass [CBy Compile, CBy RunPure]) 'c' "cby" "Compiles and runs the created-by analysis"
   <|> flg' (Pass [LVA Compile, LVA RunPure]) 'v' "lva" "Compiles and runs the live variable analysis"
@@ -106,7 +107,9 @@ pipelineOpts =
   <|> flg (Pass [Sharing Compile, Sharing Optimise, Sharing RunPure]) "sharing-opt" "Compiles, optimizes and runs the sharing analysis"
   <|> flg  (Pass [LVA Compile, CBy Compile, RunCByWithLVA]) "cby-with-lva" "Compiles the live variable and created-by analyses, then runs the created-by analysis using the LVA result"
   <|> flg DeadCodeElimination "dce" "Dead Code Elimination"
+  <|> flg DeadDataPass "dde-pass" "Dead Data Elimination with pre and post pipeline"
   <|> flg PureEval "eval" "Evaluate the grin program (pure)"
+  <|> flg PureEvalWithStats "eval-with-stats" "Purely evaluate the grin program and provide runtime statistics"
   <|> flg JITLLVM "llvm" "JIT with LLVM"
   <|> flg PrintAST "ast" "Print the Abstract Syntax Tree"
   <|> (SaveExecutable False . Abs <$> (strOption (mconcat [short 'o', long "save-elf", help "Save an executable ELF"])))
@@ -165,7 +168,7 @@ main = do
         content <- Text.readFile fname
         let (typeEnv, program') = either (error . M.parseErrorPretty' content) id $ parseGrinWithTypes fname content
         pure $ (Just typeEnv, if noPrelude then program' else concatPrograms [primPrelude, program'])
-    let opts     = defaultOpts { _poOutputDir = outputDir, _poFailOnLint = True, _poLogging = not quiet, _poSaveBinary = saveBinary }
+    let opts     = defaultOpts { _poOutputDir = outputDir, _poFailOnLint = True, _poStatistics = True, _poLogging = not quiet, _poSaveBinary = saveBinary }
     case steps of
       [] -> void $ optimize opts program [] postPipeline
       _  -> void $ pipeline opts mTypeEnv program steps
