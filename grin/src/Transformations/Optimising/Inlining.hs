@@ -36,7 +36,7 @@ selectInlineSet prog@(Program exts defs) = inlineSet where
     , let Stat{..} = cata folder def
     ]
 
-  bindSequenceLimit = 100
+  bindSequenceLimit = 150
 
   -- TODO: limit inline overhead using CALL COUNT * SIZE < LIMIT
 
