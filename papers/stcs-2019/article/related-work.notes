@@ -113,3 +113,5 @@ a 0CFA egy context insenitive (azaz 0 level context sensitive) Control Flow Anal
 es az MLton egy context insensitive higher order control flow analysis-t csinal
 ezt meg bele kene irni a cikkbe a 0CFA-hoz
 amugy letezik k-CFA is ott k szintig contextus fuggo
+
+LHC reference, LHC uses JHC style GRIN
