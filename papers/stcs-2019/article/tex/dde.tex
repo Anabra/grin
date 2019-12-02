@@ -8,7 +8,7 @@
 	
 	Within the framework of GRIN, it was Remi Turk, who presented the initial version of dead data elimination in his master's thesis~\cite{remi-masters}. His original implementation used intraprocedural analyses and an untyped representation of GRIN. We extended the algorithm with interprocedural analyses, and improved the ``dummification" process (see Sections~\ref{subsec:producers-and-consumers}~and~\ref{subsec:undefined}). In the following we present a high level overview of the original dead data elimination algorithm, as well as detail some of our modifications.
 	
-	\subsection{Dead Data Elimination in GRIN}
+	\subsection{Dead data elimination in GRIN}
 	
 	In the context of GRIN, dead data elimination removes dead fields of data constructors (or nodes) for both definition- and use-sites. In the followings, we will refer to definition-sites as \emph{producers} and to use-sites as \emph{consumers}. Producers and consumers are in a \emph{many-to-many} relationship with each other. A producer can define a variable used by many consumers, and a consumer can use a variable possibly defined by many producers. It only depends on the control flow of the program. Program~code~\ref{code:dde-simple} illustrates dead data elimination on a very simple example with a single producer and a single consumer.
 	
@@ -50,7 +50,7 @@
 	
 	Dead data elimination requires a considerable amount of data-flow analyses and possibly multiple transformation passes. First of all, it has to identify potentially removable dead fields of a node. This information can be acquired by running liveness analysis on the program (see Section~\ref{sub-sec:lva}). After that, it has to connect producers with consumers by running the \emph{created-by data-flow analysis}. Then it has to group producers together sharing at least one common consumer, and determine whether a given field for a given producer can be removed globally, or just dummified locally. Finally, it has to transform both the producers and the consumers.
 	
-	\subsection{Created-by Analysis}
+	\subsection{Created-by analysis}
 	
 	The created-by analysis, as its name suggests is responsible for determining the set of producers a given variable-was possibly created by. For our purposes, it is sufficient to track only node valued variables, since these are the only potential candidates for dead data elimination. Analysis~example~\ref{analysis:cby} demonstrates how the algorithm works on a simple program.
 	
@@ -80,7 +80,7 @@
 					\pilcode{b}     & $\set{CFalse[\pilcode{b}]}$ \\\hline
 					\pilcode{y}     & $\set{CTrue[\pilcode{a}], CFalse[\pilcode{b}]}$ \\
 				\end{tcolorbox}
-				\subcaption{Anyalsis result}
+				\subcaption{Analysis result}
 			\end{minipage}
 		\end{center}
 		\caption{An example demonstrating the created-by analysis}
@@ -91,11 +91,11 @@
 	
 	\footnotetext[1]{\label{footnote:cby-example}For the sake of simplicity, we will assume that \pilcode{xs} was constructed with the \pilcode{CNil} and \pilcode{CCons} tags. Also its producers are irrelevant in this example}
 	
-	\subsection{Grouping Producers}
+	\subsection{Grouping producers}
 	
 	On a higher abstraction level, the result of the created-by analysis can be interpreted as a bipartite directed graph between producers and consumers. One group of nodes represents the producers and the other one represents the consumers. A producer is connected to a consumer if and only if the value created by the producer can be consumed by the consumer. Furthermore, each component of the graph corresponds to one producer-consumer group. Each producer inside the group can only create values consumed by the consumers inside the same group, and a similar statement holds for the consumers as well.
 	
-	\subsection{Transforming Producers and Consumers}
+	\subsection{Transforming producers and consumers}
 	\label{subsec:producers-and-consumers}
 	
 	As mentioned earlier, the transformation applied by dead data elimination can be specific for each producer-consumer group, and both the producers and the consumers have to be transformed. Also, the transformation can not always simply remove the dead field of a producer. Take a look at Figure~\ref{fig:producers-and-consumers}. 
