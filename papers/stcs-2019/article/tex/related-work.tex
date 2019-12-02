@@ -7,7 +7,15 @@
 
 	GHC~\cite{ghc} is the de facto Haskell compiler. It is an industrial strength compiler supporting Haskell2010 with a multitude of language extensions. It has full support for multi-threading, asynchronous exception handling, incremental compilation and software transactional memory.
 	
-	GHC is the most feature-rich stable Haskell compiler. However, its optimizer part is lacking in two respects. Firstly, neither of its intermediate representations (STG and Core) can express laziness explicitly, which means that the strictness analysis cannot be as optimal as it could be. Secondly, GHC only supports optimization on a per-module basis by default, and only optimizes across modules after inlining certain specific functions. This can drastically limit the information available for the optimization passes, hence decreasing their efficiency. The following sections will show alternative compilation techniques to resolve the issues presented above.
+	GHC is the most feature-rich stable Haskell compiler. However, its optimizer part is lacking in two respects. Firstly, neither of its intermediate representations (STG and Core) can express laziness explicitly using the syntax of the language. This means, in order to generate optimal machine code, the code generator cannot use only the AST of the program, but also has to rely on the previously calculated strictness analysis result. This makes the code generation phase more complicated. Secondly, GHC only supports optimization on a per-module basis by default, and only optimizes across modules after inlining certain specific functions. This can drastically limit the information available for the optimization passes, hence decreasing their efficiency. The following sections will show alternative compilation techniques to resolve the issues presented above.
+	
+	\subsection{Clean compiler}
+	
+	The Clean~compiler~\cite{clean-book} is also an industrial-grade compiler, supporting concurrency and a multitude of platforms. It uses the abstract ABC machine as it's evaluation model. The ABC machine is a stack machine which uses three different stacks: the Argument stack, the Basic value stack and the Code stack. The Clean compiler performs no major optimizations on the ABC machine level, since defining code transformations on a stack-based representation would be quite inconvenient. Instead, the driving design principle behind the ABC machine is that it should be easy to generate native machine code from it. In the present days, this task is often accomplished by LLVM, which not only guarantees performance, but also provides a higher level intermediate representation. Nonetheless, the Clean compiler generates performant code for most major platforms.
+	
+	The main difference between Clean and Haskell lies in the type systems. Clean uses uniqueness typing, a concept similar to linear typing. A function argument can be marked unique, which means that it will be used only a single time in the function definition. This allows the compiler to generate destructive updates on that argument after it has been used. The efficiency of Clean programs is largely not attributed to code optimizations, but rather to the fact that the programmer writes mutable code to begin with. Uniqueness typing introduces controlled mutability which can highly increase the efficiency of Clean programs.
+	
+	%TODO: limitations of uniqueness typing (higher-kinded, mtl)
 	
 	\subsection{GRIN}
 	
@@ -35,27 +43,19 @@
 	
 	For its intermediate representation, JHC uses an alternate version of GRIN. Meacham made several modifications to the original specification of GRIN. Some of the most relevant additions are mutable variables, memory regions (heap and stack) and throw-only IO exceptions. JHC's exceptions are rather simple compared to those of UHC, since they can only be thrown, but never caught.
 	
-	JHC generates completely portable ISO C from the intermediate GRIN code.
+	JHC generates completely portable ISO C, which for instance was used to implement a NetBSD sound driver in high-level Haskell \cite{ajhc}.
 	
-	\subsubsection{AJHC}
+	% \subsubsection{AJHC}
 	
-	Originally, AJHC~\cite{ajhc} was a fork of JHC, but later it was remerged with all of its functionalities. The main goal of AJHC was to utilize formal methods in systems programming. It was used implementing a NetBSD sound driver in high-level Haskell.
+	% Originally, AJHC~\cite{ajhc} was a fork of JHC, but later it was remerged with all of its functionalities. The main goal of AJHC was to utilize formal methods in systems programming. It was used implementing a NetBSD sound driver in high-level Haskell.
 	
 	\subsubsection{LHC}
 	
 	The LLVM Haskell Compiler~\cite{lhc} is a Haskell compiler made from reusable libraries using JHC-style GRIN as its intermediate representation. As its name suggests, it generates LLVM IR code from the intermediate GRIN.
 	
-	\subsection{Other Intermediate Representations}
+	\subsection{Other intermediate representations}
 	
 	GRIN is not the only IR available for functional languages. In fact, it is not even the most advanced one. Other representations can either be structurally different or can have different expressive power. For example GRIN and LLVM are both structurally and expressively different representations, because GRIN has monadic structure, while LLVM uses basic blocks, and while GRIN has sum types, LLVM has vector instructions. In general, different design choices can open up different optimization opportunities.
-	
-	\subsubsection{Intel Research Compiler}
-	
-	The Intel Labs Haskell Research Compiler~\cite{hrc} was a result of a long running research project of Intel focusing on functional language compilation. The project's main goal was to generate very efficient code for numerical computations utilizing whole program optimization.
-	
-	The compiler reused the front end part of GHC, and worked with the external Core representation provided by it. Its optimizer part was written in MLton and was a general purpose compiler back end for strict functional languages. Differently from GRIN, it used basic blocks which can open up a whole spectrum of new optimization opportunities. Furthermore, instead of whole program defunctionalization (the generation of global \pilcode{eval}), their compiler used function pointers and data-flow analysis techniques to globally analyze the program. They also supported synchronous exceptions and multi-threading.
-	
-	One of their most relevant optimizations was the SIMD vectorization pass~\cite{hrc-simd}. Using this optimization, they could transform sequential programs into vectorized ones. In conjunction with their other optimizations, they achieved performance metrics comparable to native C~\cite{haskell-gap}.
 	
 	\subsubsection{MLton}
 	
@@ -66,6 +66,14 @@
 	Furthermore, MLton supports contification~\cite{contification}, a control flow based transformation, which turns function calls into continuations. This can expose a lot of additional control flow information, allowing for a broad range of optimizations such as tail recursive function call optimization.
 	
 	As for its back end, MLton has its own native code generator, but it can also generate LLVM IR code~\cite{mlton-llvm}.
+	
+	\subsubsection{Intel Research Compiler}
+	
+	The Intel Labs Haskell Research Compiler~\cite{hrc} was a result of a long running research project of Intel focusing on functional language compilation. The project's main goal was to generate very efficient code for numerical computations utilizing whole program optimization.
+	
+	The compiler reused the front end part of GHC, and worked with the external Core representation provided by it. Its optimizer part was written in MLton and was a general purpose compiler back end for strict functional languages. Differently from GRIN, it used basic blocks which can open up a whole spectrum of new optimization opportunities. Furthermore, instead of whole program defunctionalization (the generation of global \pilcode{eval}), their compiler used function pointers and data-flow analysis techniques to globally analyze the program. They also supported synchronous exceptions and multi-threading.
+	
+	One of their most relevant optimizations was the SIMD vectorization pass~\cite{hrc-simd}. Using this optimization, they could transform sequential programs into vectorized ones. In conjunction with their other optimizations, they achieved performance metrics comparable to native C~\cite{haskell-gap}.
 	
 	% \subsection{Compilers with LLVM Back Ends}
 	
