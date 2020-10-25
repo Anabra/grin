@@ -1,0 +1,144 @@
+easy (without type env):
+  - DONE: evaluated case elimination
+  - DONE: trivial case elimination
+  - DONE: update elimination
+  - DONE: constant propagation
+
+
+easy (with type env):
+  - DONE: non-shared elimination
+  - DONE: CSE
+  - DONE: SDFE
+  - DONE: SDVE
+  - DONE: SDPE
+  - DONE: SCO
+  - DONE: DFE
+  - DONE: DPE
+
+medium:
+  - DONE: case copy propagation
+  - DONE: copy propagation
+  - DONE: DVE (no longer needed)
+  - DONE: dead data elimination
+
+moderate:
+  - DONE: case hoisting
+  - DONE: inlining
+
+hard:
+  - DONE: arity raising
+  - DONE: generalized unboxing
+
+DONE: investigate update elimination vs CSE
+
+Branches:
+
+  [x] 32-conversion-fix
+  [X] 32-alt-remove-unnamed
+  [x] 32-alt-analyses
+  [ ] 32-trf-cse
+  [ ] 32-trf-case-elims
+  [ ] 32-trf-copy-propagation
+  [ ] 32-simplify-aspats
+  [ ] 32-trf-const-propagation
+  [ ] 32-trf-non-shared-elim
+  [ ] 32-trf-sco
+
+
+Dependencies:
+  32-conversion-fix         -- SYNC
+  32-alt-remove-unnamed     -- SYNC
+  32-alt-analyses           -- SYNC
+  32-trf-cse                -- XES: Modified expr and fundef parsers, XES: Added context-based testing for the new AST
+  32-trf-case-elims         -- XES: updated context-based testing for the new syntax, XES: added name generation to context-based testing
+  32-trf-copy-propagation   -- ES: Added extra comments to Transformations/Util
+  32-simplify-aspats        -- SYNC
+  32-trf-const-propagation  --
+  32-trf-non-shared-elim    -- XExtracted some utility function from CreatedBySpec to Test/Util
+  32-trf-sco                --
+
+Dependencies2:
+  [x] 32-conversion-fix            -- SYNC
+  [x] 32-alt-remove-unnamed        -- SYNC
+  [x] 32-alt-analyses              -- SYNC
+  [x] 32-tests-ctx-based           -- SYNC
+  [x] 32-trf-cse-2                 --
+  [x] 32-trf-case-elims-2          --
+  [x] 32-trf-copy-propagation-2    --
+  [x] 32-simplify-aspats-2         -- SYNC (this some extra commits - SEE BELOW ˘˘˘)
+  [x] 32-trf-const-propagation-2   --
+  [x] 32-trf-non-shared-elim-2     --
+  [x] 32-trf-sco-2                 --
+  [x] 32-trf-sdve                  --
+  [x] 32-trf-sdfe                  --
+  [x] 32-trf-sdpe                  --
+  [X] 32-trf-case-copy-propagation --
+  [x] 32-trf-case-hoisting         --                       UP UNTIL THIS POINT ^^^
+  [x] 32-trf-inlining
+  [x] 32-trf-gub
+  [x] 32-trf-arity-raising
+
+  [x] 32-lva-fix                   -- PARTIAL SYNC (only for D_E transformations)
+  [x] 32-trf-dfe
+  [x] 32-trf-dpe
+  [-] 32-trf-dve                   -- (will be scrapped)
+  [x] 32-trf-dde
+
+  [x] 32-trf-sync                  -- SYNC
+
+  [x] 32-sharing-fix
+  [x] 32-reducer
+  [x] 32-reducer-llvm
+  [x] 32-renamings
+  [x] 32-primops-test-spec
+
+
+  [ ] 32-reducer-sync               -- SYNC
+
+  [ ] 32-pipeline
+  [ ] 32-bugfixes
+  [ ] 32-test-merge-with-master-2
+
+
+
+TODO:
+  test/TestSpec
+
+TODO:
+  DONE: AbsInt codegen/pure might not be correct!
+        it skips the original registers containing nodes which might have pointer fields
+  Sharing --> as pattern semantics
+  case scrutinee and altname problem
+  QUESTION: update var shouldn't be regarded as shared?
+
+NOTE:
+  - gen eval doesn't need to be changed
+
+TODO:
+  - nullary primop tests for IDFE
+
+TODO:
+- extra line in output / extra spaces:
+  - check Pipeline/saveGrin
+  - check pretty-printing
+  - check content matching in EndToEnd
+  - check readFile in evaluatePipelineTest
+
+WORKLOW:
+  - stack exec -- grin <any-file> --load-old-ast <old-ast-binary> --save-binary <file-name> --save-grin <destination-grin>
+  - mv .output/001.<file-name>.binary <destination-binary>
+  - grin <destination-binary>   --load-binary --eval
+  - ./grin-old <old-ast-binary> --load-binary --eval
+
+  if they match, NICE!
+
+  - add primops prelude
+
+
+
+grin grin.cabal --load-old-ast test-data/idris-grin/c02/01/004.TrivialCaseElimination.binary --save-grin test-data-es/idris-grin/c02/01/input.grin
+ PipelineStep: LoadOldAST "test-data/idris-grin/c02/01/004.TrivialCaseElimination.binary"     (8.241308 ms)
+ PipelineStep: SaveGrin (Abs "test-data-es/idris-grin/c02/01/input.grin")                     (40.236481 ms)
+grin test-data-es/idris-grin/c02/01/input.grin --save-binary "asd"
+ PipelineStep: SaveBinary "asd"                                                               (72.018122 ms)
+mv .output/000.asd.binary test-data-es/idris-grin/c02/01/input.binary

@@ -1,0 +1,6 @@
+# this is only a temporary file, make sre to remove this
+*.opts
+*.expected
+*.expected-no
+*.opts-no
+

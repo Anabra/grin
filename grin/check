@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+# check c02 01 asd input
+
+chapter=$1
+id=$2
+oldFile=$3
+newFile=$4
+
+echo "./grin-old test-data/idris-grin/"$chapter"/"$id"/"$oldFile".binary --load-binary --eval"
+      ./grin-old test-data/idris-grin/"$chapter"/"$id"/"$oldFile".binary --load-binary --eval
+
+echo "grin test-data-es/idris-grin/"$chapter"/"$id"/"$newFile".binary --load-binary --eval"
+      grin test-data-es/idris-grin/"$chapter"/"$id"/"$newFile".binary --load-binary --eval
+
+echo "grin test-data-es/idris-grin/"$chapter"/"$id"/"$newFile".grin --eval"
+      grin test-data-es/idris-grin/"$chapter"/"$id"/"$newFile".grin --eval

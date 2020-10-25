@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# convert c02 01 asd input
+
+chapter=$1
+id=$2
+file=$3
+outname=$4
+
+echo "mkdir -p test-data-es/idris-grin/"$chapter"/"$id"/"
+      mkdir -p test-data-es/idris-grin/"$chapter"/"$id"/
+
+echo "grin grin.cabal --load-old-ast test-data/idris-grin/"$chapter"/"$id"/"$file".binary --save-grin test-data-es/idris-grin/"$chapter"/"$id"/"$outname".grin"
+grin grin.cabal --load-old-ast test-data/idris-grin/"$chapter"/"$id"/"$file".binary --save-grin test-data-es/idris-grin/"$chapter"/"$id"/"$outname".grin
+
+echo "grin test-data-es/idris-grin/"$chapter"/"$id"/"$outname".grin --save-binary asd"
+grin test-data-es/idris-grin/"$chapter"/"$id"/"$outname".grin --save-binary asd
+
+echo "mv .output/000.asd.binary test-data-es/idris-grin/"$chapter"/"$id"/"$outname".binary"
+mv .output/000.asd.binary test-data-es/idris-grin/"$chapter"/"$id"/"$outname".binary
+
+echo "rm -r .output"
+rm -r .output

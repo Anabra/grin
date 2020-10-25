@@ -1,0 +1,16 @@
+	.end-to-end-test/
+	check
+	convert
+	convert_csv_to_relations.sh
+	foobar
+	grin-old
+	grin/effects/
+	grin/id_add_1.grin
+	grin/live-variable/
+	test-data-es/
+	test-data/dead-parameter-elimination/pnode.grin.out
+	test-data/idris-grin/
+	tmp/
+	../notes/new-syntax.md
+	../stack.yaml.lock
+
